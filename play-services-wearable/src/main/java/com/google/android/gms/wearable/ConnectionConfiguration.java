@@ -19,6 +19,8 @@ package com.google.android.gms.wearable;
 import org.microg.safeparcel.AutoSafeParcelable;
 import org.microg.safeparcel.SafeParceled;
 
+import java.util.List;
+
 public class ConnectionConfiguration extends AutoSafeParcelable {
 
     @SafeParceled(1)
@@ -41,6 +43,28 @@ public class ConnectionConfiguration extends AutoSafeParcelable {
     public boolean btlePriority = true;
     @SafeParceled(10)
     public String nodeId;
+    @SafeParceled(11)
+    public String packageName;
+    @SafeParceled(12)
+    public int connectionRetryStrategy;
+    @SafeParceled(value = 13, subClass = String.class)
+    public List<String> allowedConfigPackages;
+    @SafeParceled(14)
+    public boolean migrating;
+    @SafeParceled(15)
+    public boolean dataItemSyncEnabled;
+    @SafeParceled(16)
+    public ConnectionRestrictions connectionRestrictions;
+    @SafeParceled(17)
+    public boolean removeConnectionWhenBondRemovedByUser;
+    @SafeParceled(18)
+    public ConnectionDelayFilters connectionDelayFilters;
+    @SafeParceled(19)
+    public int maxSupportedRemoteAndroidSdkVersion;
+    @SafeParceled(20)
+    public int runtimeType;
+    @SafeParceled(21)
+    public boolean skipConnectingIfDeviceNotBonded;
 
     private ConnectionConfiguration() {
         name = address = null;

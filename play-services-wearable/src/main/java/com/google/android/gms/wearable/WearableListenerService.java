@@ -41,6 +41,13 @@ import org.microg.gms.wearable.ChannelImpl;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import com.google.android.gms.wearable.internal.ConnectionStateEventParcelable;
+import com.google.android.gms.wearable.internal.ConsentResponse;
+import com.google.android.gms.wearable.internal.GetListenerServiceRequest;
+import com.google.android.gms.wearable.internal.IRpcResponseCallback;
+import com.google.android.gms.wearable.internal.IServiceResponseCallback;
+import com.google.android.gms.wearable.internal.NodeMigratedEventParcelable;
+import com.google.android.gms.wearable.internal.RestoreCompletedEventParcelable;
 
 import static org.microg.gms.common.Constants.GMS_PACKAGE_NAME;
 
@@ -258,6 +265,37 @@ public abstract class WearableListenerService extends Service implements Capabil
                     }
                 }
             });
+        }
+
+        @Override
+        public void onRequestReceived(MessageEventParcelable request, IRpcResponseCallback callback) throws RemoteException {
+            Log.d(TAG, "unimplemented Method: onRequestReceived");
+        }
+
+        @Override
+        public void onConsentChanged(ConsentResponse consent) throws RemoteException {
+            Log.d(TAG, "unimplemented Method: onConsentChanged");
+        }
+
+        @Override
+        public void onConnectionStateChanged(ConnectionStateEventParcelable event) throws RemoteException {
+            Log.d(TAG, "unimplemented Method: onConnectionStateChanged");
+        }
+
+        @Override
+        public void onNodeMigrated(NodeMigratedEventParcelable event) throws RemoteException {
+            Log.d(TAG, "unimplemented Method: onNodeMigrated");
+        }
+
+        @Override
+        public void onRestoreCompleted(RestoreCompletedEventParcelable event) throws RemoteException {
+            Log.d(TAG, "unimplemented Method: onRestoreCompleted");
+        }
+
+        @Override
+        public boolean getListenerService(GetListenerServiceRequest request, IServiceResponseCallback callback) throws RemoteException {
+            Log.d(TAG, "unimplemented Method: getListenerService");
+            return false;
         }
     }
 

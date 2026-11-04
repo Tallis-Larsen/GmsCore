@@ -34,6 +34,11 @@ import java.io.FileNotFoundException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import android.accounts.Account;
+import com.google.android.gms.wearable.AppRecommendationsRequest;
+import com.google.android.gms.wearable.AppTheme;
+import com.google.android.gms.wearable.ConnectionDelayConfig;
+import com.google.android.gms.wearable.MessageOptions;
 
 public class WearableServiceImpl extends IWearableService.Stub {
     private static final String TAG = "GmsWearSvcImpl";
@@ -467,6 +472,286 @@ public class WearableServiceImpl extends IWearableService.Stub {
                 disableConfig(callbacks, configurations[0].name);
             }
         });
+    }
+
+    @Override
+    public void sendRequest(IWearableCallbacks callbacks, String targetNodeId, String path, byte[] data) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: sendRequest");
+    }
+
+    @Override
+    public void sendMessageWithOptions(IWearableCallbacks callbacks, String targetNodeId, String path, byte[] data, MessageOptions options) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: sendMessageWithOptions");
+    }
+
+    @Override
+    public void sendRequestWithOptions(IWearableCallbacks callbacks, String targetNodeId, String path, byte[] data, MessageOptions options) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: sendRequestWithOptions");
+    }
+
+    @Override
+    public void retryConnection(IWearableCallbacks callbacks, String configName, boolean arg) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: retryConnection");
+    }
+
+    @Override
+    public void updateConnectionStrategy(IWearableCallbacks callbacks, String configName, int strategy) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: updateConnectionStrategy");
+    }
+
+    @Override
+    public void getRelatedConfigs(IWearableCallbacks callbacks) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: getRelatedConfigs");
+    }
+
+    @Override
+    public void updateConfig(IWearableCallbacks callbacks, ConnectionConfiguration config) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: updateConfig");
+    }
+
+    @Override
+    public void cancelMigration(IWearableCallbacks callbacks, ConnectionConfiguration config) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: cancelMigration");
+    }
+
+    @Override
+    public void isNodeConnectionMetered(IWearableCallbacks callbacks, String nodeId) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: isNodeConnectionMetered");
+    }
+
+    @Override
+    public void setConnectionDelayConfig(IWearableCallbacks callbacks, ConnectionDelayConfig config) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: setConnectionDelayConfig");
+    }
+
+    @Override
+    public void requestConnection(IWearableCallbacks callbacks, RequestConnectionParcelable request, IConnectionCallback connectionCallback) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: requestConnection");
+    }
+
+    @Override
+    public void releaseConnectionRequest(IWearableCallbacks callbacks, IConnectionCallback connectionCallback) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: releaseConnectionRequest");
+    }
+
+    @Override
+    public void getCompanionPackageForNode(IWearableCallbacks callbacks, String nodeId) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: getCompanionPackageForNode");
+    }
+
+    @Override
+    public void getNodeId(IWearableCallbacks callbacks, String arg) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: getNodeId");
+    }
+
+    @Override
+    public void getLocalCapabilities(IWearableCallbacks callbacks) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: getLocalCapabilities");
+    }
+
+    @Override
+    public void initiateDataSyncTracking(IWearableCallbacks callbacks, String peerNodeId) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: initiateDataSyncTracking");
+    }
+
+    @Override
+    public void flushBatchedData(IWearableCallbacks callbacks, String nodeId) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: flushBatchedData");
+    }
+
+    @Override
+    public void notifyChannelFlushed(IWearableCallbacks callbacks, String token) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: notifyChannelFlushed");
+    }
+
+    @Override
+    public void syncWifiCredentialWithArg(IWearableCallbacks callbacks, String nodeId, String arg) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: syncWifiCredentialWithArg");
+    }
+
+    @Override
+    public void syncWifiCredential(IWearableCallbacks callbacks, String nodeId) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: syncWifiCredential");
+    }
+
+    @Override
+    public void getEapId(IWearableCallbacks callbacks, int subscriptionId) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: getEapId");
+    }
+
+    @Override
+    public void performEapAka(IWearableCallbacks callbacks, int subscriptionId, String arg) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: performEapAka");
+    }
+
+    @Override
+    public void setCloudSyncSettingByNode(IWearableCallbacks callbacks, String nodeId, boolean enable) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: setCloudSyncSettingByNode");
+    }
+
+    @Override
+    public void getUserConsentStatus(IWearableCallbacks callbacks) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: getUserConsentStatus");
+    }
+
+    @Override
+    public void addAccountToConsent(IWearableCallbacks callbacks, AddAccountToConsentRequest request) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: addAccountToConsent");
+    }
+
+    @Override
+    public void addSupervisedAccount(IWearableCallbacks callbacks, AddSupervisedAccountRequest request) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: addSupervisedAccount");
+    }
+
+    @Override
+    public void recordOptIn(IWearableCallbacks callbacks, PrivacyRecordOptinRequest request) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: recordOptIn");
+    }
+
+    @Override
+    public void recordSwaadlOptIn(IWearableCallbacks callbacks) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: recordSwaadlOptIn");
+    }
+
+    @Override
+    public void acceptTerms(IWearableCallbacks callbacks, AcceptTermsRequest request) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: acceptTerms");
+    }
+
+    @Override
+    public void recordTermConsent(IWearableCallbacks callbacks, RecordTermConsentRequest request) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: recordTermConsent");
+    }
+
+    @Override
+    public void getTerms(IWearableCallbacks callbacks, int termType) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: getTerms");
+    }
+
+    @Override
+    public void migrateToConsentPerWatch(IWearableCallbacks callbacks, String nodeId) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: migrateToConsentPerWatch");
+    }
+
+    @Override
+    public void getConsentStatus(IWearableCallbacks callbacks, ConsentStatusRequest request) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: getConsentStatus");
+    }
+
+    @Override
+    public void recordUntetheredSupervisedAccountTransfer(IWearableCallbacks callbacks, RecordUntetheredSupervisedAccountTransferRequest request) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: recordUntetheredSupervisedAccountTransfer");
+    }
+
+    @Override
+    public void associateDeviceAndAccountWithFastPair(IWearableCallbacks callbacks, String nodeId, Account account, String s1, String s2) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: associateDeviceAndAccountWithFastPair");
+    }
+
+    @Override
+    public void getFastpairAccountKeys(IWearableCallbacks callbacks) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: getFastpairAccountKeys");
+    }
+
+    @Override
+    public void getFastpairAccountKeyByAccount(IWearableCallbacks callbacks, Account account) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: getFastpairAccountKeyByAccount");
+    }
+
+    @Override
+    public void getBackupSettingsSupported(IWearableCallbacks callbacks, String nodeId) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: getBackupSettingsSupported");
+    }
+
+    @Override
+    public void getRestoreSupported(IWearableCallbacks callbacks) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: getRestoreSupported");
+    }
+
+    @Override
+    public void startRestoreSession(IWearableCallbacks callbacks, StartRestoreSessionRequest request) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: startRestoreSession");
+    }
+
+    @Override
+    public void saveRestoreState(IWearableCallbacks callbacks, SaveRestoreStateRequest request) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: saveRestoreState");
+    }
+
+    @Override
+    public void getRestoreState(IWearableCallbacks callbacks, GetRestoreStateRequest request) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: getRestoreState");
+    }
+
+    @Override
+    public void getBackupEnabled(IWearableCallbacks callbacks, String nodeId) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: getBackupEnabled");
+    }
+
+    @Override
+    public void isRestoreOngoing(IWearableCallbacks callbacks, String nodeId) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: isRestoreOngoing");
+    }
+
+    @Override
+    public void hasAvailableBackups(IWearableCallbacks callbacks, FetchBackupRequest request) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: hasAvailableBackups");
+    }
+
+    @Override
+    public void getCachedBackups(IWearableCallbacks callbacks, FetchBackupRequest request) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: getCachedBackups");
+    }
+
+    @Override
+    public void getAppRecommendations(IWearableCallbacks callbacks, AppRecommendationsRequest request) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: getAppRecommendations");
+    }
+
+    @Override
+    public void setThemeForApp(IWearableCallbacks callbacks, AppTheme theme) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: setThemeForApp");
+    }
+
+    @Override
+    public void getAppTheme(IWearableCallbacks callbacks, String packageName) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: getAppTheme");
+    }
+
+    @Override
+    public void getCanonicalAppTheme(IWearableCallbacks callbacks, AppTheme theme) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: getCanonicalAppTheme");
+    }
+
+    @Override
+    public void logCounter(IWearableCallbacks callbacks, LogCounterRequest request) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: logCounter");
+    }
+
+    @Override
+    public void logEvent(IWearableCallbacks callbacks, LogEventRequest request) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: logEvent");
+    }
+
+    @Override
+    public void logTimer(IWearableCallbacks callbacks, LogTimerRequest request) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: logTimer");
+    }
+
+    @Override
+    public void flushLogs(IWearableCallbacks callbacks) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: flushLogs");
+    }
+
+    @Override
+    public void unknown85(IWearableCallbacks callbacks) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: unknown85");
+    }
+
+    @Override
+    public void unknown118(IWearableCallbacks callbacks) throws RemoteException {
+        Log.d(TAG, "unimplemented Method: unknown118");
     }
 
     @Override

@@ -10,6 +10,28 @@ import com.google.android.gms.wearable.internal.IChannelStreamCallbacks;
 import com.google.android.gms.wearable.internal.IWearableCallbacks;
 import com.google.android.gms.wearable.internal.IWearableService;
 
+import android.accounts.Account;
+import com.google.android.gms.wearable.AppRecommendationsRequest;
+import com.google.android.gms.wearable.AppTheme;
+import com.google.android.gms.wearable.ConnectionDelayConfig;
+import com.google.android.gms.wearable.MessageOptions;
+import com.google.android.gms.wearable.internal.AcceptTermsRequest;
+import com.google.android.gms.wearable.internal.AddAccountToConsentRequest;
+import com.google.android.gms.wearable.internal.AddSupervisedAccountRequest;
+import com.google.android.gms.wearable.internal.ConsentStatusRequest;
+import com.google.android.gms.wearable.internal.FetchBackupRequest;
+import com.google.android.gms.wearable.internal.GetRestoreStateRequest;
+import com.google.android.gms.wearable.internal.IConnectionCallback;
+import com.google.android.gms.wearable.internal.LogCounterRequest;
+import com.google.android.gms.wearable.internal.LogEventRequest;
+import com.google.android.gms.wearable.internal.LogTimerRequest;
+import com.google.android.gms.wearable.internal.PrivacyRecordOptinRequest;
+import com.google.android.gms.wearable.internal.RecordTermConsentRequest;
+import com.google.android.gms.wearable.internal.RecordUntetheredSupervisedAccountTransferRequest;
+import com.google.android.gms.wearable.internal.RequestConnectionParcelable;
+import com.google.android.gms.wearable.internal.SaveRestoreStateRequest;
+import com.google.android.gms.wearable.internal.StartRestoreSessionRequest;
+
 interface IWearableService {
     // Configs
     void putConfig(IWearableCallbacks callbacks, in ConnectionConfiguration config) = 19;
@@ -79,4 +101,86 @@ interface IWearableService {
     void getConnection(IWearableCallbacks callbacks) = 2;
     void enableConnection(IWearableCallbacks callbacks) = 3;
     void disableConnection(IWearableCallbacks callbacks) = 4;
+
+    // Added for newer Wear OS companion apps. AIDL sends each id plus 1 as the transaction code,
+    // so "= 57" arrives as code 58, the number Google's code and logs use.
+    // Messages and requests
+    void sendRequest(IWearableCallbacks callbacks, String targetNodeId, String path, in byte[] data) = 57;
+    void sendMessageWithOptions(IWearableCallbacks callbacks, String targetNodeId, String path, in byte[] data, in MessageOptions options) = 58;
+    void sendRequestWithOptions(IWearableCallbacks callbacks, String targetNodeId, String path, in byte[] data, in MessageOptions options) = 59;
+
+    // Connection management
+    void retryConnection(IWearableCallbacks callbacks, String configName, boolean arg) = 68;
+    void updateConnectionStrategy(IWearableCallbacks callbacks, String configName, int strategy) = 71;
+    void getRelatedConfigs(IWearableCallbacks callbacks) = 72;
+    void updateConfig(IWearableCallbacks callbacks, in ConnectionConfiguration config) = 73;
+    void cancelMigration(IWearableCallbacks callbacks, in ConnectionConfiguration config) = 75;
+    void isNodeConnectionMetered(IWearableCallbacks callbacks, String nodeId) = 89;
+    void setConnectionDelayConfig(IWearableCallbacks callbacks, in ConnectionDelayConfig config) = 100;
+    void requestConnection(IWearableCallbacks callbacks, in RequestConnectionParcelable request, IConnectionCallback connectionCallback) = 111;
+    void releaseConnectionRequest(IWearableCallbacks callbacks, IConnectionCallback connectionCallback) = 112;
+
+    // Nodes and capabilities
+    void getCompanionPackageForNode(IWearableCallbacks callbacks, String nodeId) = 62;
+    void getNodeId(IWearableCallbacks callbacks, String arg) = 66;
+    void getLocalCapabilities(IWearableCallbacks callbacks) = 115;
+
+    // Channels and data sync
+    void initiateDataSyncTracking(IWearableCallbacks callbacks, String peerNodeId) = 92;
+    void flushBatchedData(IWearableCallbacks callbacks, String nodeId) = 102;
+    void notifyChannelFlushed(IWearableCallbacks callbacks, String token) = 116;
+
+    // Wi-Fi and cellular
+    void syncWifiCredentialWithArg(IWearableCallbacks callbacks, String nodeId, String arg) = 87;
+    void syncWifiCredential(IWearableCallbacks callbacks, String nodeId) = 88;
+    void getEapId(IWearableCallbacks callbacks, int subscriptionId) = 60;
+    void performEapAka(IWearableCallbacks callbacks, int subscriptionId, String arg) = 61;
+
+    // Cloud sync
+    void setCloudSyncSettingByNode(IWearableCallbacks callbacks, String nodeId, boolean enable) = 74;
+
+    // Consents and terms
+    void getUserConsentStatus(IWearableCallbacks callbacks) = 64;
+    void addAccountToConsent(IWearableCallbacks callbacks, in AddAccountToConsentRequest request) = 65;
+    void addSupervisedAccount(IWearableCallbacks callbacks, in AddSupervisedAccountRequest request) = 69;
+    void recordOptIn(IWearableCallbacks callbacks, in PrivacyRecordOptinRequest request) = 70;
+    void recordSwaadlOptIn(IWearableCallbacks callbacks) = 83;
+    void acceptTerms(IWearableCallbacks callbacks, in AcceptTermsRequest request) = 93;
+    void recordTermConsent(IWearableCallbacks callbacks, in RecordTermConsentRequest request) = 94;
+    void getTerms(IWearableCallbacks callbacks, int termType) = 95;
+    void migrateToConsentPerWatch(IWearableCallbacks callbacks, String nodeId) = 101;
+    void getConsentStatus(IWearableCallbacks callbacks, in ConsentStatusRequest request) = 103;
+    void recordUntetheredSupervisedAccountTransfer(IWearableCallbacks callbacks, in RecordUntetheredSupervisedAccountTransferRequest request) = 104;
+
+    // Fast Pair
+    void associateDeviceAndAccountWithFastPair(IWearableCallbacks callbacks, String nodeId, in Account account, String s1, String s2) = 63;
+    void getFastpairAccountKeys(IWearableCallbacks callbacks) = 91;
+    void getFastpairAccountKeyByAccount(IWearableCallbacks callbacks, in Account account) = 96;
+
+    // Backup and restore
+    void getBackupSettingsSupported(IWearableCallbacks callbacks, String nodeId) = 78;
+    void getRestoreSupported(IWearableCallbacks callbacks) = 79;
+    void startRestoreSession(IWearableCallbacks callbacks, in StartRestoreSessionRequest request) = 81;
+    void saveRestoreState(IWearableCallbacks callbacks, in SaveRestoreStateRequest request) = 85;
+    void getRestoreState(IWearableCallbacks callbacks, in GetRestoreStateRequest request) = 86;
+    void getBackupEnabled(IWearableCallbacks callbacks, String nodeId) = 90;
+    void isRestoreOngoing(IWearableCallbacks callbacks, String nodeId) = 110;
+    void hasAvailableBackups(IWearableCallbacks callbacks, in FetchBackupRequest request) = 113;
+    void getCachedBackups(IWearableCallbacks callbacks, in FetchBackupRequest request) = 114;
+
+    // App recommendations and themes
+    void getAppRecommendations(IWearableCallbacks callbacks, in AppRecommendationsRequest request) = 67;
+    void setThemeForApp(IWearableCallbacks callbacks, in AppTheme theme) = 76;
+    void getAppTheme(IWearableCallbacks callbacks, String packageName) = 77;
+    void getCanonicalAppTheme(IWearableCallbacks callbacks, in AppTheme theme) = 109;
+
+    // Logging
+    void logCounter(IWearableCallbacks callbacks, in LogCounterRequest request) = 105;
+    void logEvent(IWearableCallbacks callbacks, in LogEventRequest request) = 106;
+    void logTimer(IWearableCallbacks callbacks, in LogTimerRequest request) = 107;
+    void flushLogs(IWearableCallbacks callbacks) = 108;
+
+    // Purpose unknown; both answer with a BooleanResponse
+    void unknown85(IWearableCallbacks callbacks) = 84;
+    void unknown118(IWearableCallbacks callbacks) = 117;
 }
