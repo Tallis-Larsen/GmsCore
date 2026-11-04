@@ -279,7 +279,7 @@ public class WearableImpl {
     private void syncAssetToPeer(String nodeId, DataItemRecord record, Asset asset) throws IOException {
         RootMessage announceMessage = new RootMessage.Builder().setAsset(new SetAsset.Builder()
                 .digest(asset.getDigest())
-                .appkeys(new AppKeys(Collections.singletonList(new AppKey(record.packageName, record.signatureDigest))))
+                .appKeys(new AppKeys.Builder().appKeys(Collections.singletonList(new AppKey.Builder().packageName(record.packageName).signatureDigest(record.signatureDigest).build())).build())
                 .build()).hasAsset(true).build();
         activeConnections.get(nodeId).writeMessage(announceMessage);
         File assetFile = createAssetFile(asset.getDigest());
@@ -290,11 +290,11 @@ public class WearableImpl {
         int c = 0;
         while ((c = fis.read(arr)) > 0) {
             if (lastPiece != null) {
-                activeConnections.get(nodeId).writeMessage(new RootMessage.Builder().filePiece(new FilePiece(fileName, false, lastPiece, null)).build());
+                activeConnections.get(nodeId).writeMessage(new RootMessage.Builder().filePiece(new FilePiece.Builder().fileName(fileName).finalPiece(false).piece(lastPiece).build()).build());
             }
             lastPiece = ByteString.of(arr, 0, c);
         }
-        activeConnections.get(nodeId).writeMessage(new RootMessage.Builder().filePiece(new FilePiece(fileName, true, lastPiece, asset.getDigest())).build());
+        activeConnections.get(nodeId).writeMessage(new RootMessage.Builder().filePiece(new FilePiece.Builder().fileName(fileName).finalPiece(true).piece(lastPiece).digest(asset.getDigest()).build()).build());
     }
 
     public void addAssetToDatabase(Asset asset, List<AppKey> appKeys) {
@@ -324,7 +324,7 @@ public class WearableImpl {
                 if (digest.equals(finalPieceDigest)) {
                     if (file.renameTo(createAssetFile(digest))) {
                         nodeDatabase.markAssetAsPresent(digest);
-                        connection.writeMessage(new RootMessage.Builder().ackAsset(new AckAsset(digest)).build());
+                        connection.writeMessage(new RootMessage.Builder().ackAsset(new AckAsset.Builder().digest(digest).build()).build());
                     } else {
                         Log.w(TAG, "Could not rename to target file name. delete=" + file.delete());
                     }

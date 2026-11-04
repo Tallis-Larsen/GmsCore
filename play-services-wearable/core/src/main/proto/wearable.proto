@@ -1,0 +1,188 @@
+/*
+ * SPDX-FileCopyrightText: 2026, microG Project Team
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+syntax = "proto2";
+
+package org.microg.wearable.proto;
+
+message MessagePiece {
+    optional bytes data = 1;
+    optional string digest = 2;
+    optional int32 thisPiece = 3;
+    optional int32 totalPieces = 4;
+    optional int32 queueId = 5;
+}
+
+message RootMessage {
+    optional SetAsset setAsset = 4;
+    optional AckAsset ackAsset = 5;
+    optional FetchAsset fetchAsset = 6;
+    optional Connect connect = 7;
+    optional SyncStart syncStart = 8;
+    optional SetDataItem setDataItem = 9;
+    optional Request rpcRequest = 10;
+    optional Heartbeat heartbeat = 11;
+    optional FilePiece filePiece = 12;
+    optional bool hasAsset = 13;
+    optional Request channelRequest = 16;
+    optional Unknown17 unknown17 = 17;
+    optional Request request18 = 18;        // Request with expectsResponse or responseTo set; others use rpcRequest
+    optional Unknown19 unknown19 = 19;
+    optional Unknown20 unknown20 = 20;
+}
+
+message Unknown17 {}
+message Unknown19 {}
+message Unknown20 {}
+
+message Connect {
+    optional string id = 1;
+    optional string name = 2;
+    optional int64 peerAndroidId = 3;
+    optional int32 unknown4 = 4;                // 3 from both sides
+    optional int32 peerVersion = 5;             // highest version we speak; both sides use the lower one
+    optional int32 peerMinimumVersion = 6;
+    optional string networkId = 7;
+    optional string unknown8 = 8;
+    optional bool migrating = 9;
+    optional string migratingFromNodeId = 10;
+    optional int32 androidSdkVersion = 11;
+    optional bool unknown12 = 12;
+    optional bool unknown13 = 13;
+}
+
+message SyncStart {
+    optional int64 receivedSeqId = 1;
+    repeated SyncTableEntry syncTable = 2;
+    optional int32 version = 3;
+}
+
+message SyncTableEntry {
+    optional string key = 1;
+    optional int64 value = 2;
+}
+
+message SetDataItem {
+    optional string packageName = 1;
+    optional string uri = 2;
+    repeated string unknown3 = 3;
+    optional bytes data = 4;
+    optional int64 seqId = 5;
+    optional bool deleted = 6;
+    optional string source = 7;
+    repeated AssetEntry assets = 8;
+    optional string signatureDigest = 9;
+    optional int64 lastModified = 10;
+}
+
+message AssetEntry {
+    optional string key = 1;
+    optional Asset value = 2;
+    optional int32 unknown3 = 3;
+}
+
+message Asset {
+    optional string digest = 4;
+}
+
+message SetAsset {
+    optional string digest = 1;
+    optional bytes data = 2;
+    optional AppKeys appKeys = 3;
+}
+
+message AppKeys {
+    repeated AppKey appKeys = 1;
+}
+
+message AppKey {
+    optional string packageName = 1;
+    optional string signatureDigest = 2;
+}
+
+message AckAsset {
+    optional string digest = 1;
+}
+
+message FetchAsset {
+    optional string packageName = 1;
+    optional string assetName = 2;
+    optional bool permission = 3;
+    optional string signatureDigest = 4;
+}
+
+message FilePiece {
+    optional string fileName = 1;
+    optional bool finalPiece = 2;
+    optional bytes piece = 3;
+    optional string digest = 4;
+}
+
+message Heartbeat {}
+
+message Request {
+    optional int32 requestId = 1;
+    optional string packageName = 2;
+    optional string signatureDigest = 3;
+    optional string targetNodeId = 4;
+    optional int32 unknown5 = 5;
+    optional string path = 6;
+    optional bytes rawData = 7;
+    optional string sourceNodeId = 8;
+    optional ChannelRequest channel = 9;
+    optional int32 generation = 10;
+    optional bool expectsResponse = 11;
+    optional int32 responseTo = 12;             // requestId + 31 * (generation + 527) of the request
+    optional int32 priority = 13;               // 2 when the app asked for high priority, else 1
+}
+
+message ChannelRequest {
+    optional ChannelControlRequest control = 2;
+    optional ChannelDataRequest data = 3;
+    optional ChannelDataAckRequest dataAck = 4;
+    optional int32 minimumVersion = 6;          // Google drops values above 1
+    optional ChannelOrigin origin = 7;
+}
+
+enum ChannelOrigin {
+    ORIGIN_CHANNEL_API = 0;
+    ORIGIN_LARGE_ASSET_API = 1;
+}
+
+enum ChannelControlType {
+    CHANNEL_CONTROL_UNKNOWN = 0;
+    CHANNEL_CONTROL_OPEN = 1;
+    CHANNEL_CONTROL_OPEN_ACK = 2;
+    CHANNEL_CONTROL_CLOSE = 3;
+}
+
+message ChannelControlRequest {
+    optional ChannelControlType type = 1;
+    optional fixed64 channelId = 2;
+    optional bool fromChannelOpener = 3;
+    optional string packageName = 4;
+    optional string signatureDigest = 5;
+    optional string path = 6;
+    optional int32 closeErrorCode = 7;
+    optional bool allowOverMetered = 8;
+    optional bytes unknown9 = 9;
+}
+
+message ChannelDataHeader {
+    optional fixed64 channelId = 1;
+    optional bool fromChannelOpener = 2;
+    optional int64 requestId = 3;
+}
+
+message ChannelDataRequest {
+    optional ChannelDataHeader header = 1;
+    optional bytes payload = 2;
+    optional bool finalMessage = 3;
+}
+
+message ChannelDataAckRequest {
+    optional ChannelDataHeader header = 1;
+    optional bool finalMessage = 2;
+}

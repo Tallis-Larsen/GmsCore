@@ -75,9 +75,9 @@ public class MessageHandler extends ServerMessageListener {
                     .receivedSeqId(-1L)
                     .version(2)
                     .syncTable(Arrays.asList(
-                            new SyncTableEntry.Builder().key("cloud").value(1L).build(),
-                            new SyncTableEntry.Builder().key(wearable.getLocalNodeId()).value(wearable.getCurrentSeqId(wearable.getLocalNodeId())).build(), // TODO
-                            new SyncTableEntry.Builder().key(peerNodeId).value(wearable.getCurrentSeqId(peerNodeId)).build() // TODO
+                            new SyncTableEntry.Builder().key("cloud").value_(1L).build(),
+                            new SyncTableEntry.Builder().key(wearable.getLocalNodeId()).value_(wearable.getCurrentSeqId(wearable.getLocalNodeId())).build(), // TODO
+                            new SyncTableEntry.Builder().key(peerNodeId).value_(wearable.getCurrentSeqId(peerNodeId)).build() // TODO
                     )).build()).build());
         } catch (IOException e) {
             Log.w(TAG, e);
@@ -97,12 +97,12 @@ public class MessageHandler extends ServerMessageListener {
     public void onSetAsset(SetAsset setAsset) {
         Log.d(TAG, "onSetAsset: " + setAsset);
         Asset asset;
-        if (setAsset.data != null) {
-            asset = Asset.createFromBytes(setAsset.data.toByteArray());
+        if (setAsset.data_ != null) {
+            asset = Asset.createFromBytes(setAsset.data_.toByteArray());
         } else {
             asset = Asset.createFromRef(setAsset.digest);
         }
-        wearable.addAssetToDatabase(asset, setAsset.appkeys.appKeys);
+        wearable.addAssetToDatabase(asset, setAsset.appKeys.appKeys);
     }
 
     @Override
@@ -124,7 +124,7 @@ public class MessageHandler extends ServerMessageListener {
         boolean hasLocalNode = false;
         if (syncStart.syncTable != null) {
             for (SyncTableEntry entry : syncStart.syncTable) {
-                wearable.syncToPeer(peerNodeId, entry.key, entry.value);
+                wearable.syncToPeer(peerNodeId, entry.key, entry.value_);
                 if (wearable.getLocalNodeId().equals(entry.key)) hasLocalNode = true;
             }
         } else {
@@ -156,7 +156,7 @@ public class MessageHandler extends ServerMessageListener {
             // TODO: find next hop
         }
         try {
-            getConnection().writeMessage(new RootMessage.Builder().heartbeat(new Heartbeat()).build());
+            getConnection().writeMessage(new RootMessage.Builder().heartbeat(new Heartbeat.Builder().build()).build());
         } catch (IOException e) {
             onDisconnected();
         }

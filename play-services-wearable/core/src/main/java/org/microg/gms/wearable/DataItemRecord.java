@@ -113,14 +113,14 @@ public class DataItemRecord {
                 .deleted(deleted)
                 .lastModified(lastModified);
         if (source != null) builder.source(source);
-        if (dataItem.data != null) builder.data(ByteString.of(dataItem.data));
+        if (dataItem.data != null) builder.data_(ByteString.of(dataItem.data));
         List<AssetEntry> protoAssets = new ArrayList<AssetEntry>();
         Map<String, Asset> assets = dataItem.getAssets();
         for (String key : assets.keySet()) {
             protoAssets.add(new AssetEntry.Builder()
                     .key(key)
                     .unknown3(4)
-                    .value(new org.microg.wearable.proto.Asset.Builder()
+                    .value_(new org.microg.wearable.proto.Asset.Builder()
                             .digest(assets.get(key).getDigest())
                             .build()).build());
         }
@@ -154,10 +154,10 @@ public class DataItemRecord {
     public static DataItemRecord fromSetDataItem(SetDataItem setDataItem) {
         DataItemRecord record = new DataItemRecord();
         record.dataItem = new DataItemInternal(Uri.parse(setDataItem.uri));
-        if (setDataItem.data != null) record.dataItem.data = setDataItem.data.toByteArray();
+        if (setDataItem.data_ != null) record.dataItem.data = setDataItem.data_.toByteArray();
         if (setDataItem.assets != null) {
             for (AssetEntry asset : setDataItem.assets) {
-                record.dataItem.addAsset(asset.key, Asset.createFromRef(asset.value.digest));
+                record.dataItem.addAsset(asset.key, Asset.createFromRef(asset.value_.digest));
             }
         }
         record.source = setDataItem.source;
