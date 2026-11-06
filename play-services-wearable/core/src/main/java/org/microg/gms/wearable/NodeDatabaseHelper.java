@@ -87,7 +87,7 @@ public class NodeDatabaseHelper extends SQLiteOpenHelper {
             params = new String[]{packageName, signatureDigest, host, path};
             selection = "packageName = ? AND signatureDigest = ? AND host = ? AND path LIKE ?";
         }
-        selection += " AND deleted=0 AND assetsPresent !=0";
+        selection += " AND deleted=0 AND (assetsPresent !=0 OR assets_digest IS NULL)";
         return getReadableDatabase().rawQuery("SELECT host AS host,path AS path,data AS data,\'\' AS tags,assetname AS asset_key,assets_digest AS asset_id FROM dataItemsAndAssets WHERE " + selection, params);
     }
 
@@ -173,6 +173,7 @@ public class NodeDatabaseHelper extends SQLiteOpenHelper {
     }
 
     private static String finishRecord(SQLiteDatabase db, String key, DataItemRecord record) {
+        db.delete("assetrefs", "dataitems_id=?", new String[]{key});
         if (!record.deleted) {
             for (Map.Entry<String, Asset> asset : record.dataItem.getAssets().entrySet()) {
                 ContentValues assetValues = new ContentValues();

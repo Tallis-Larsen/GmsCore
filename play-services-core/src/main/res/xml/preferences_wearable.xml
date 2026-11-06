@@ -20,6 +20,14 @@
         app:isPreferenceVisible="false"
         tools:isPreferenceVisible="true" />
 
+    <Preference
+        android:icon="@drawable/ic_info_outline"
+        android:key="pref_wearable_call_permission"
+        android:title="@string/pref_wearable_permission_title"
+        android:summary="@string/pref_wearable_call_permission_summary"
+        app:isPreferenceVisible="false"
+        tools:isPreferenceVisible="true" />
+
     <org.microg.gms.ui.TextPreference
         android:selectable="false"
         app:iconSpaceReserved="false"

@@ -325,6 +325,7 @@ Please set up a password, PIN, or pattern lock screen."</string>
     <string name="pref_wearable_intro">When enabled, Wear OS watches paired with this device stay connected in the background, including after a restart. When disabled, watches are only connected while an app is using them.</string>
     <string name="pref_wearable_permission_title">Permission required</string>
     <string name="pref_wearable_permission_summary">Tap to allow access to nearby devices, which is required to connect to watches</string>
+    <string name="pref_wearable_call_permission_summary">Tap to allow answering and ending phone calls from the watch</string>
     <string name="wearable_state_connected">Connected to <xliff:g example="Google Pixel Watch 2">%1$s</xliff:g></string>
     <string name="wearable_state_disconnected">Disconnected</string>
 

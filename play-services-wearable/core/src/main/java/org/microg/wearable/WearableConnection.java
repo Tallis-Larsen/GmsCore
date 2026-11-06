@@ -21,6 +21,7 @@ import java.util.List;
 import okio.ByteString;
 
 public abstract class WearableConnection implements Runnable {
+    private static final int MAX_PIECE_DATA_SIZE = 12215;
     private static String B64ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
     private HashMap<Integer, List<MessagePiece>> piecesQueues = new HashMap<Integer, List<MessagePiece>>();
@@ -53,13 +54,18 @@ public abstract class WearableConnection implements Runnable {
 
     public synchronized void writeMessage(RootMessage message) throws IOException {
         byte[] bytes = message.encode();
-        // TODO: cut in pieces
-        writeMessagePiece(new MessagePiece.Builder()
-                .data_(ByteString.of(bytes))
-                .digest(calculateDigest(bytes))
-                .thisPiece(1)
-                .totalPieces(1)
-                .queueId(getQueueId(message)).build());
+        String digest = calculateDigest(bytes);
+        int queueId = getQueueId(message);
+        int totalPieces = Math.max((bytes.length + MAX_PIECE_DATA_SIZE - 1) / MAX_PIECE_DATA_SIZE, 1);
+        for (int piece = 0; piece < totalPieces; piece++) {
+            int offset = piece * MAX_PIECE_DATA_SIZE;
+            writeMessagePiece(new MessagePiece.Builder()
+                    .data_(ByteString.of(bytes, offset, Math.min(MAX_PIECE_DATA_SIZE, bytes.length - offset)))
+                    .digest(digest)
+                    .thisPiece(piece + 1)
+                    .totalPieces(totalPieces)
+                    .queueId(queueId).build());
+        }
     }
 
     private static int getQueueId(RootMessage message) {

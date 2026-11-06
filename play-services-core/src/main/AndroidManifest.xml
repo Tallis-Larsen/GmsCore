@@ -142,6 +142,7 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
 
     <uses-permission android:name="android.permission.AUTHENTICATE_ACCOUNTS" />
     <uses-permission android:name="android.permission.GET_ACCOUNTS" />
@@ -456,6 +457,10 @@
                 <action android:name="com.google.android.gms.wearable.BIND" />
             </intent-filter>
         </service>
+
+        <receiver
+            android:name="org.microg.gms.wearable.ServiceInfoReceiver"
+            android:exported="false" />
 
         <receiver android:name="org.microg.gms.wearable.TriggerReceiver">
             <intent-filter>
@@ -1389,6 +1394,14 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="com.google.android.gms.findmydevice.spot.service.locationreport.START" />
+            </intent-filter>
+        </service>
+
+        <service
+            android:name="org.microg.gms.people.ContactsSyncThirdPartyService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.google.android.gms.people.contactssync.service.THIRD_PARTY_START" />
             </intent-filter>
         </service>
 

@@ -226,7 +226,7 @@ public enum GmsService {
     RECAPTCHA(205, "com.google.android.gms.recaptcha.service.START"),
     DUOKIT_SERVICE(206),
     SYSTEM_UPDATE_TV_API(207),
-    CONTACT_SYNC(208, "com.google.android.gms.people.contactssync.service.START"),
+    CONTACT_SYNC(208, "com.google.android.gms.people.contactssync.service.START", "com.google.android.gms.people.contactssync.service.THIRD_PARTY_START"),
     FEEDBACK_CAR(209),
     SMARTDEVICE_SOURCE_DIRECT_TRANSFER(210, "com.google.android.gms.smartdevice.directtransfer.SourceDirectTransferService.START"),
     SMARTDEVICE_TARGET_DIRECT_TRANSFER(211),

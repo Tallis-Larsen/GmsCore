@@ -43,6 +43,7 @@ import com.google.android.gms.common.data.DataHolder;
 import com.google.android.gms.wearable.Asset;
 import com.google.android.gms.wearable.ConnectionConfiguration;
 import com.google.android.gms.wearable.Node;
+import com.google.android.gms.wearable.internal.CapabilityInfoParcelable;
 import com.google.android.gms.wearable.internal.ChannelEventParcelable;
 import com.google.android.gms.wearable.internal.IRpcResponseCallback;
 import com.google.android.gms.wearable.internal.IWearableListener;
@@ -171,6 +172,7 @@ public class WearableImpl {
         intent.setPackage(record.packageName);
         intent.setData(record.dataItem.uri);
         invokeListeners(intent, listener -> listener.onDataChanged(record.toEventDataHolder()));
+        sendCapabilityChanged(record);
         return record;
     }
 
@@ -391,7 +393,8 @@ public class WearableImpl {
         Log.d(TAG, "Adding connection to list of open connections: " + connection + " with connect " + connect);
         activeConnections.put(connect.id, connection);
         activeConfigNames.put(connect.id, configName);
-        onPeerConnected(new NodeParcelable(connect.id, connect.name));
+        onPeerConnected(new NodeParcelable(connect.id, connect.name, 0, true));
+        sendCapabilitiesChanged(connect.id);
         // Fetch missing assets
         Cursor cursor = nodeDatabase.listMissingAssets();
         if (cursor != null) {
@@ -425,6 +428,7 @@ public class WearableImpl {
         activeConfigNames.remove(connect.id);
         channelManager.onPeerDisconnected(connect.id);
         onPeerDisconnected(new NodeParcelable(connect.id, connect.name));
+        sendCapabilitiesChanged(connect.id);
     }
 
     public List<NodeParcelable> getConnectedNodesParcelableList() {
@@ -482,19 +486,19 @@ public class WearableImpl {
 
     public void onPeerConnected(NodeParcelable node) {
         Log.d(TAG, "onPeerConnected: " + node);
-        invokeListeners(null, listener -> listener.onPeerConnected(node));
+        invokeListeners(createNodeChangedIntent(), listener -> listener.onPeerConnected(node));
         addConnectedNode(node);
     }
 
     public void onPeerDisconnected(NodeParcelable node) {
         Log.d(TAG, "onPeerDisconnected: " + node);
-        invokeListeners(null, listener -> listener.onPeerDisconnected(node));
+        invokeListeners(createNodeChangedIntent(), listener -> listener.onPeerDisconnected(node));
         removeConnectedNode(node.getId());
     }
 
     public void onConnectedNodes(List<NodeParcelable> nodes) {
         Log.d(TAG, "onConnectedNodes: " + nodes);
-        invokeListeners(null, listener -> listener.onConnectedNodes(nodes));
+        invokeListeners(createNodeChangedIntent(), listener -> listener.onConnectedNodes(nodes));
     }
 
     public DataItemRecord putData(PutDataRequest request, String packageName) {
@@ -645,6 +649,14 @@ public class WearableImpl {
         }
     }
 
+    public void requestCallPermission() {
+        if (SDK_INT < 26) return;
+        Intent intent = new Intent(context, AskPermissionActivity.class);
+        intent.putExtra(AskPermissionActivityKt.EXTRA_PERMISSIONS, new String[]{Manifest.permission.ANSWER_PHONE_CALLS});
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        context.startActivity(intent);
+    }
+
     private void requestBluetoothPermission() {
         if (SDK_INT < 31 || ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED) return;
         synchronized (bluetoothThreads) {
@@ -737,6 +749,49 @@ public class WearableImpl {
         invokeListeners(intent, listener -> listener.onChannelEvent(event));
     }
 
+    private void sendCapabilityChanged(DataItemRecord record) {
+        if (Constants.GMS_PACKAGE_NAME.equals(record.packageName)) {
+            sendCapabilityChanged(record.dataItem.uri.getPath());
+        }
+    }
+
+    private void sendCapabilityChanged(String path) {
+        if (path == null || !path.startsWith(CapabilityManager.PATH_PREFIX)) return;
+        String[] segments = path.substring(CapabilityManager.PATH_PREFIX.length()).split("/");
+        if (segments.length != 3 || !segments[1].equals(PackageUtils.firstSignatureDigest(context, segments[0]))) return;
+        String capability = Uri.decode(segments[2]);
+        CapabilityInfoParcelable info = new CapabilityManager(context, this, segments[0]).getCapability(capability, 1);
+        Intent intent = new Intent("com.google.android.gms.wearable.CAPABILITY_CHANGED");
+        intent.setPackage(segments[0]);
+        intent.setData(createEventUri("", capability));
+        invokeListeners(intent, listener -> listener.onConnectedCapabilityChanged(info));
+    }
+
+    private void sendCapabilitiesChanged(String nodeId) {
+        try {
+            networkHandlerLock.await();
+        } catch (InterruptedException e) {
+            Log.w(TAG, e);
+            return;
+        }
+        networkHandler.post(() -> {
+            Cursor cursor = nodeDatabase.getDataItemsForDataHolderByHostAndPath(Constants.GMS_PACKAGE_NAME, Constants.GMS_PACKAGE_SIGNATURE_SHA1, nodeId, CapabilityManager.PATH_PREFIX);
+            if (cursor == null) return;
+            try {
+                int path = cursor.getColumnIndexOrThrow("path");
+                while (cursor.moveToNext()) {
+                    sendCapabilityChanged(cursor.getString(path));
+                }
+            } finally {
+                cursor.close();
+            }
+        });
+    }
+
+    private static Intent createNodeChangedIntent() {
+        return new Intent("com.google.android.gms.wearable.NODE_CHANGED").setData(createEventUri("", null));
+    }
+
     private static Uri createEventUri(String host, String path) {
         Uri.Builder builder = new Uri.Builder().scheme("wear").authority(host);
         if (path != null) builder.path(path);
@@ -781,6 +836,23 @@ public class WearableImpl {
             cursor.close();
         }
         return record;
+    }
+
+    public void deleteGmsDataItem(String path) {
+        for (DataItemRecord record : nodeDatabase.deleteDataItems(Constants.GMS_PACKAGE_NAME, Constants.GMS_PACKAGE_SIGNATURE_SHA1, getLocalNodeId(), path)) {
+            syncRecordToAll(record);
+        }
+    }
+
+    public DataHolder getGmsDataItems(String path) {
+        return new DataHolder(nodeDatabase.getDataItemsForDataHolderByHostAndPath(Constants.GMS_PACKAGE_NAME, Constants.GMS_PACKAGE_SIGNATURE_SHA1, null, path), 0, null);
+    }
+
+    public NodeParcelable getNodeParcelable(String nodeId) {
+        for (NodeParcelable node : getConnectedNodesParcelableList()) {
+            if (node.getId().equals(nodeId)) return node;
+        }
+        return new NodeParcelable(nodeId, nodeId, Integer.MAX_VALUE, false);
     }
 
     public DataItemRecord getDataItemByUri(Uri uri, String packageName) {

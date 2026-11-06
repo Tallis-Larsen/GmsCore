@@ -16,17 +16,21 @@
 
 package org.microg.gms.wearable;
 
+import static android.os.Build.VERSION.SDK_INT;
+
 import android.content.Context;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Parcel;
 import android.os.ParcelFileDescriptor;
 import android.os.RemoteException;
+import android.telecom.TelecomManager;
 import android.util.Base64;
 import android.util.Log;
 
 import com.google.android.gms.common.api.CommonStatusCodes;
 import com.google.android.gms.common.api.Status;
+import com.google.android.gms.common.internal.safeparcel.SafeParcelableSerializer;
 import com.google.android.gms.wearable.Asset;
 import com.google.android.gms.wearable.ConnectionConfiguration;
 import com.google.android.gms.wearable.internal.*;
@@ -44,6 +48,7 @@ import com.google.android.gms.wearable.MessageOptions;
 import com.google.android.gms.wearable.Term;
 import com.google.android.gms.wearable.WearableStatusCodes;
 
+import org.microg.gms.utils.ExtendedPackageInfo;
 import org.microg.gms.wearable.core.R;
 import org.microg.wearable.proto.PrivacySettings;
 
@@ -51,6 +56,7 @@ public class WearableServiceImpl extends IWearableService.Stub {
     private static final String TAG = "GmsWearSvcImpl";
 
     private static final String PATH_PRIVACY_SETTINGS = "/privacy_settings";
+    private static final String APP_THEME_PREFERENCES = "wearable_app_themes";
 
     private final Context context;
     private final String packageName;
@@ -249,11 +255,13 @@ public class WearableServiceImpl extends IWearableService.Stub {
     @Deprecated
     public void getCloudSyncOptInDone(IWearableCallbacks callbacks) throws RemoteException {
         Log.d(TAG, "unimplemented Method: getCloudSyncOptInDone");
+        callbacks.onGetCloudSyncOptInOutDoneResponse(new GetCloudSyncOptInOutDoneResponse(CommonStatusCodes.SUCCESS, true));
     }
 
     @Override
     public void setCloudSyncSetting(IWearableCallbacks callbacks, boolean enable) throws RemoteException {
         Log.d(TAG, "unimplemented Method: setCloudSyncSetting");
+        callbacks.onStatus(enable ? new Status(WearableStatusCodes.FEATURE_DISABLED) : Status.SUCCESS);
     }
 
     @Override
@@ -264,11 +272,13 @@ public class WearableServiceImpl extends IWearableService.Stub {
     @Override
     public void getCloudSyncOptInStatus(IWearableCallbacks callbacks) throws RemoteException {
         Log.d(TAG, "unimplemented Method: getCloudSyncOptInStatus");
+        callbacks.onGetCloudSyncOptInStatusResponse(new GetCloudSyncOptInStatusResponse(CommonStatusCodes.SUCCESS, true, false));
     }
 
     @Override
     public void sendRemoteCommand(IWearableCallbacks callbacks, byte b) throws RemoteException {
         Log.d(TAG, "unimplemented Method: sendRemoteCommand: " + b);
+        callbacks.onStatus(new Status(WearableStatusCodes.FEATURE_DISABLED));
     }
 
     @Override
@@ -295,26 +305,23 @@ public class WearableServiceImpl extends IWearableService.Stub {
 
     @Override
     public void getConnectedCapability(IWearableCallbacks callbacks, String capability, int nodeFilter) throws RemoteException {
-        Log.d(TAG, "unimplemented Method: getConnectedCapability " + capability + ", " + nodeFilter);
-        postMain(callbacks, () -> {
-            List<NodeParcelable> nodes = new ArrayList<>();
-            for (String host : capabilities.getNodesForCapability(capability)) {
-                nodes.add(new NodeParcelable(host, host));
-            }
-            CapabilityInfoParcelable capabilityInfo = new CapabilityInfoParcelable(capability, nodes);
-            callbacks.onGetCapabilityResponse(new GetCapabilityResponse(0, capabilityInfo));
-        });
+        Log.d(TAG, "getConnectedCapability: " + capability + ", " + nodeFilter);
+        postMain(callbacks, () -> callbacks.onGetCapabilityResponse(new GetCapabilityResponse(0, capabilities.getCapability(capability, nodeFilter))));
     }
 
     @Override
     public void getAllCapabilities(IWearableCallbacks callbacks, int nodeFilter) throws RemoteException {
-        Log.d(TAG, "unimplemented Method: getConnectedCapaibilties: " + nodeFilter);
-        callbacks.onGetAllCapabilitiesResponse(new GetAllCapabilitiesResponse());
+        Log.d(TAG, "getAllCapabilities: " + nodeFilter);
+        postMain(callbacks, () -> {
+            GetAllCapabilitiesResponse response = new GetAllCapabilitiesResponse();
+            response.capabilities = capabilities.getAllCapabilities(nodeFilter);
+            callbacks.onGetAllCapabilitiesResponse(response);
+        });
     }
 
     @Override
     public void addLocalCapability(IWearableCallbacks callbacks, String capability) throws RemoteException {
-        Log.d(TAG, "unimplemented Method: addLocalCapability: " + capability);
+        Log.d(TAG, "addLocalCapability: " + capability);
         this.wearable.networkHandler.post(new CallbackRunnable(callbacks) {
             @Override
             public void run(IWearableCallbacks callbacks) throws RemoteException {
@@ -325,7 +332,7 @@ public class WearableServiceImpl extends IWearableService.Stub {
 
     @Override
     public void removeLocalCapability(IWearableCallbacks callbacks, String capability) throws RemoteException {
-        Log.d(TAG, "unimplemented Method: removeLocalCapability: " + capability);
+        Log.d(TAG, "removeLocalCapability: " + capability);
         this.wearable.networkHandler.post(new CallbackRunnable(callbacks) {
             @Override
             public void run(IWearableCallbacks callbacks) throws RemoteException {
@@ -336,8 +343,11 @@ public class WearableServiceImpl extends IWearableService.Stub {
 
     @Override
     public void addListener(IWearableCallbacks callbacks, AddListenerRequest request) throws RemoteException {
+        Log.d(TAG, "addListener: " + packageName);
         if (request.listener != null) {
             wearable.addListener(packageName, request.listener, request.intentFilters);
+            // Clients keep their listeners across a restart of this service, so they need to learn the current state
+            postNetwork(callbacks, () -> request.listener.onConnectedNodes(wearable.getConnectedNodesParcelableList()));
         }
         callbacks.onStatus(Status.SUCCESS);
     }
@@ -351,26 +361,58 @@ public class WearableServiceImpl extends IWearableService.Stub {
     @Override
     public void getStorageInformation(IWearableCallbacks callbacks) throws RemoteException {
         Log.d(TAG, "unimplemented Method: getStorageInformation");
+        callbacks.onStorageInfoResponse(new StorageInfoResponse(WearableStatusCodes.FEATURE_DISABLED));
     }
 
     @Override
     public void clearStorage(IWearableCallbacks callbacks) throws RemoteException {
         Log.d(TAG, "unimplemented Method: clearStorage");
+        callbacks.onStatus(new Status(WearableStatusCodes.FEATURE_DISABLED));
     }
 
     @Override
     public void endCall(IWearableCallbacks callbacks) throws RemoteException {
-        Log.d(TAG, "unimplemented Method: endCall");
+        runCallControl(callbacks, "endCall", telecomManager -> {
+            if (SDK_INT < 28) throw new UnsupportedOperationException();
+            telecomManager.endCall();
+        });
     }
 
     @Override
     public void acceptRingingCall(IWearableCallbacks callbacks) throws RemoteException {
-        Log.d(TAG, "unimplemented Method: acceptRingingCall");
+        runCallControl(callbacks, "acceptRingingCall", TelecomManager::acceptRingingCall);
     }
 
     @Override
     public void silenceRinger(IWearableCallbacks callbacks) throws RemoteException {
         Log.d(TAG, "unimplemented Method: silenceRinger");
+        callbacks.onStatus(new Status(WearableStatusCodes.FEATURE_DISABLED));
+    }
+
+    private void runCallControl(IWearableCallbacks callbacks, String name, CallControl control) {
+        Log.d(TAG, name + ": " + packageName);
+        if (!new ExtendedPackageInfo(context, packageName).isGooglePackage()) {
+            throw new SecurityException(packageName + " may not control phone calls");
+        }
+        postMain(callbacks, () -> {
+            TelecomManager telecomManager = (TelecomManager) context.getSystemService(Context.TELECOM_SERVICE);
+            if (telecomManager == null) {
+                callbacks.onStatus(new Status(CommonStatusCodes.DEVELOPER_ERROR));
+                return;
+            }
+            try {
+                control.run(telecomManager);
+                callbacks.onStatus(Status.SUCCESS);
+            } catch (Exception | NoSuchMethodError e) {
+                Log.w(TAG, name + " failed", e);
+                if (e instanceof SecurityException) wearable.requestCallPermission();
+                callbacks.onStatus(new Status(CommonStatusCodes.INTERNAL_ERROR));
+            }
+        });
+    }
+
+    private interface CallControl {
+        void run(TelecomManager telecomManager);
     }
 
     /*
@@ -380,16 +422,19 @@ public class WearableServiceImpl extends IWearableService.Stub {
     @Override
     public void injectAncsNotificationForTesting(IWearableCallbacks callbacks, AncsNotificationParcelable notification) throws RemoteException {
         Log.d(TAG, "unimplemented Method: injectAncsNotificationForTesting: " + notification);
+        callbacks.onStatus(new Status(WearableStatusCodes.FEATURE_DISABLED));
     }
 
     @Override
     public void doAncsPositiveAction(IWearableCallbacks callbacks, int i) throws RemoteException {
         Log.d(TAG, "unimplemented Method: doAncsPositiveAction: " + i);
+        callbacks.onStatus(new Status(WearableStatusCodes.FEATURE_DISABLED));
     }
 
     @Override
     public void doAncsNegativeAction(IWearableCallbacks callbacks, int i) throws RemoteException {
         Log.d(TAG, "unimplemented Method: doAncsNegativeAction: " + i);
+        callbacks.onStatus(new Status(WearableStatusCodes.FEATURE_DISABLED));
     }
 
     @Override
@@ -428,17 +473,20 @@ public class WearableServiceImpl extends IWearableService.Stub {
 
     @Override
     public void writeChannelInputToFd(IWearableCallbacks callbacks, String s, ParcelFileDescriptor fd) throws RemoteException {
-        Log.d(TAG, "unimplemented Method: writeChannelInputToFd: " + s);
+        Log.d(TAG, "writeChannelInputToFd: " + s);
+        postNetwork(callbacks, () -> wearable.getChannelManager().writeInputToFd(packageName, s, fd, callbacks));
     }
 
     @Override
     public void readChannelOutputFromFd(IWearableCallbacks callbacks, String s, ParcelFileDescriptor fd, long l1, long l2) throws RemoteException {
-        Log.d(TAG, "unimplemented Method: readChannelOutputFromFd: " + s + ", " + l1 + ", " + l2);
+        Log.d(TAG, "readChannelOutputFromFd: " + s);
+        postNetwork(callbacks, () -> wearable.getChannelManager().readOutputFromFd(packageName, s, fd, l1, l2, callbacks));
     }
 
     @Override
     public void syncWifiCredentials(IWearableCallbacks callbacks) throws RemoteException {
         Log.d(TAG, "unimplemented Method: syncWifiCredentials");
+        callbacks.onStatus(new Status(WearableStatusCodes.FEATURE_DISABLED));
     }
 
     /*
@@ -449,6 +497,7 @@ public class WearableServiceImpl extends IWearableService.Stub {
     @Deprecated
     public void putConnection(IWearableCallbacks callbacks, ConnectionConfiguration config) throws RemoteException {
         Log.d(TAG, "unimplemented Method: putConnection");
+        callbacks.onStatus(new Status(WearableStatusCodes.FEATURE_DISABLED));
     }
 
     @Override
@@ -518,7 +567,9 @@ public class WearableServiceImpl extends IWearableService.Stub {
 
     @Override
     public void retryConnection(IWearableCallbacks callbacks, String configName, boolean arg) throws RemoteException {
-        Log.d(TAG, "unimplemented Method: retryConnection");
+        Log.d(TAG, "retryConnection: " + configName);
+        wearable.retryBluetoothConnections();
+        callbacks.onStatus(Status.SUCCESS);
     }
 
     @Override
@@ -530,6 +581,7 @@ public class WearableServiceImpl extends IWearableService.Stub {
     @Override
     public void getRelatedConfigs(IWearableCallbacks callbacks) throws RemoteException {
         Log.d(TAG, "unimplemented Method: getRelatedConfigs");
+        callbacks.onGetConfigsResponse(new GetConfigsResponse(CommonStatusCodes.SUCCESS, new ConnectionConfiguration[0]));
     }
 
     @Override
@@ -544,31 +596,41 @@ public class WearableServiceImpl extends IWearableService.Stub {
     @Override
     public void cancelMigration(IWearableCallbacks callbacks, ConnectionConfiguration config) throws RemoteException {
         Log.d(TAG, "unimplemented Method: cancelMigration");
+        callbacks.onStatus(new Status(WearableStatusCodes.FEATURE_DISABLED));
     }
 
     @Override
     public void isNodeConnectionMetered(IWearableCallbacks callbacks, String nodeId) throws RemoteException {
-        Log.d(TAG, "unimplemented Method: isNodeConnectionMetered");
+        Log.d(TAG, "isNodeConnectionMetered: " + nodeId);
+        BooleanResponse response = new BooleanResponse();
+        response.statusCode = CommonStatusCodes.SUCCESS;
+        callbacks.onBooleanResponse(response);
     }
 
     @Override
     public void setConnectionDelayConfig(IWearableCallbacks callbacks, ConnectionDelayConfig config) throws RemoteException {
         Log.d(TAG, "unimplemented Method: setConnectionDelayConfig");
+        callbacks.onStatus(Status.SUCCESS);
     }
 
     @Override
     public void requestConnection(IWearableCallbacks callbacks, RequestConnectionParcelable request, IConnectionCallback connectionCallback) throws RemoteException {
         Log.d(TAG, "unimplemented Method: requestConnection");
+        callbacks.onStatus(Status.SUCCESS);
     }
 
     @Override
     public void releaseConnectionRequest(IWearableCallbacks callbacks, IConnectionCallback connectionCallback) throws RemoteException {
         Log.d(TAG, "unimplemented Method: releaseConnectionRequest");
+        callbacks.onStatus(Status.SUCCESS);
     }
 
     @Override
     public void getCompanionPackageForNode(IWearableCallbacks callbacks, String nodeId) throws RemoteException {
         Log.d(TAG, "unimplemented Method: getCompanionPackageForNode");
+        GetCompanionPackageForNodeResponse response = new GetCompanionPackageForNodeResponse();
+        response.statusCode = CommonStatusCodes.ERROR;
+        callbacks.onGetCompanionPackageForNodeResponse(response);
     }
 
     @Override
@@ -584,22 +646,32 @@ public class WearableServiceImpl extends IWearableService.Stub {
 
     @Override
     public void getLocalCapabilities(IWearableCallbacks callbacks) throws RemoteException {
-        Log.d(TAG, "unimplemented Method: getLocalCapabilities");
+        Log.d(TAG, "getLocalCapabilities");
+        postMain(callbacks, () -> {
+            GetLocalCapabilitiesResponse response = new GetLocalCapabilitiesResponse();
+            response.statusCode = CommonStatusCodes.SUCCESS;
+            response.field2 = capabilities.getLocalCapabilities();
+            response.field3 = new ArrayList<>();
+            callbacks.onGetLocalCapabilitiesResponse(response);
+        });
     }
 
     @Override
     public void initiateDataSyncTracking(IWearableCallbacks callbacks, String peerNodeId) throws RemoteException {
         Log.d(TAG, "unimplemented Method: initiateDataSyncTracking");
+        callbacks.onStatus(new Status(WearableStatusCodes.FEATURE_DISABLED));
     }
 
     @Override
     public void flushBatchedData(IWearableCallbacks callbacks, String nodeId) throws RemoteException {
         Log.d(TAG, "unimplemented Method: flushBatchedData");
+        callbacks.onStatus(Status.SUCCESS);
     }
 
     @Override
     public void notifyChannelFlushed(IWearableCallbacks callbacks, String token) throws RemoteException {
-        Log.d(TAG, "unimplemented Method: notifyChannelFlushed");
+        Log.d(TAG, "notifyChannelFlushed: " + token);
+        callbacks.onStatus(Status.SUCCESS);
     }
 
     @Override
@@ -617,16 +689,23 @@ public class WearableServiceImpl extends IWearableService.Stub {
     @Override
     public void getEapId(IWearableCallbacks callbacks, int subscriptionId) throws RemoteException {
         Log.d(TAG, "unimplemented Method: getEapId");
+        GetEapIdResponse response = new GetEapIdResponse();
+        response.statusCode = WearableStatusCodes.FEATURE_DISABLED;
+        callbacks.onGetEapIdResponse(response);
     }
 
     @Override
     public void performEapAka(IWearableCallbacks callbacks, int subscriptionId, String arg) throws RemoteException {
         Log.d(TAG, "unimplemented Method: performEapAka");
+        PerformEapAkaResponse response = new PerformEapAkaResponse();
+        response.statusCode = WearableStatusCodes.FEATURE_DISABLED;
+        callbacks.onPerformEapAkaResponse(response);
     }
 
     @Override
     public void setCloudSyncSettingByNode(IWearableCallbacks callbacks, String nodeId, boolean enable) throws RemoteException {
         Log.d(TAG, "unimplemented Method: setCloudSyncSettingByNode");
+        callbacks.onStatus(enable ? new Status(WearableStatusCodes.FEATURE_DISABLED) : Status.SUCCESS);
     }
 
     @Override
@@ -644,6 +723,7 @@ public class WearableServiceImpl extends IWearableService.Stub {
     @Override
     public void addSupervisedAccount(IWearableCallbacks callbacks, AddSupervisedAccountRequest request) throws RemoteException {
         Log.d(TAG, "unimplemented Method: addSupervisedAccount");
+        callbacks.onStatus(new Status(WearableStatusCodes.FEATURE_DISABLED));
     }
 
     @Override
@@ -706,21 +786,29 @@ public class WearableServiceImpl extends IWearableService.Stub {
     @Override
     public void recordUntetheredSupervisedAccountTransfer(IWearableCallbacks callbacks, RecordUntetheredSupervisedAccountTransferRequest request) throws RemoteException {
         Log.d(TAG, "unimplemented Method: recordUntetheredSupervisedAccountTransfer");
+        callbacks.onStatus(new Status(WearableStatusCodes.FEATURE_DISABLED));
     }
 
     @Override
     public void associateDeviceAndAccountWithFastPair(IWearableCallbacks callbacks, String nodeId, Account account, String s1, String s2) throws RemoteException {
         Log.d(TAG, "unimplemented Method: associateDeviceAndAccountWithFastPair");
+        callbacks.onStatus(new Status(WearableStatusCodes.FEATURE_DISABLED));
     }
 
     @Override
     public void getFastpairAccountKeys(IWearableCallbacks callbacks) throws RemoteException {
         Log.d(TAG, "unimplemented Method: getFastpairAccountKeys");
+        GetFastpairAccountKeysResponse response = new GetFastpairAccountKeysResponse();
+        response.statusCode = WearableStatusCodes.FEATURE_DISABLED;
+        callbacks.onGetFastpairAccountKeysResponse(response);
     }
 
     @Override
     public void getFastpairAccountKeyByAccount(IWearableCallbacks callbacks, Account account) throws RemoteException {
         Log.d(TAG, "unimplemented Method: getFastpairAccountKeyByAccount");
+        GetFastpairAccountKeyByAccountResponse response = new GetFastpairAccountKeyByAccountResponse();
+        response.statusCode = WearableStatusCodes.FEATURE_DISABLED;
+        callbacks.onGetFastpairAccountKeyByAccountResponse(response);
     }
 
     @Override
@@ -742,16 +830,21 @@ public class WearableServiceImpl extends IWearableService.Stub {
     @Override
     public void startRestoreSession(IWearableCallbacks callbacks, StartRestoreSessionRequest request) throws RemoteException {
         Log.d(TAG, "unimplemented Method: startRestoreSession");
+        callbacks.onStatus(new Status(WearableStatusCodes.FEATURE_DISABLED));
     }
 
     @Override
     public void saveRestoreState(IWearableCallbacks callbacks, SaveRestoreStateRequest request) throws RemoteException {
         Log.d(TAG, "unimplemented Method: saveRestoreState");
+        callbacks.onStatus(new Status(WearableStatusCodes.FEATURE_DISABLED));
     }
 
     @Override
     public void getRestoreState(IWearableCallbacks callbacks, GetRestoreStateRequest request) throws RemoteException {
         Log.d(TAG, "unimplemented Method: getRestoreState");
+        GetRestoreStateResponse response = new GetRestoreStateResponse();
+        response.statusCode = WearableStatusCodes.FEATURE_DISABLED;
+        callbacks.onGetRestoreStateResponse(response);
     }
 
     @Override
@@ -781,56 +874,86 @@ public class WearableServiceImpl extends IWearableService.Stub {
     @Override
     public void getCachedBackups(IWearableCallbacks callbacks, FetchBackupRequest request) throws RemoteException {
         Log.d(TAG, "unimplemented Method: getCachedBackups");
+        GetCachedBackupsResponse response = new GetCachedBackupsResponse();
+        response.statusCode = WearableStatusCodes.FEATURE_DISABLED;
+        callbacks.onGetCachedBackupsResponse(response);
     }
 
     @Override
     public void getAppRecommendations(IWearableCallbacks callbacks, AppRecommendationsRequest request) throws RemoteException {
         Log.d(TAG, "unimplemented Method: getAppRecommendations");
+        AppRecommendationsResponse response = new AppRecommendationsResponse();
+        response.statusCode = WearableStatusCodes.FEATURE_DISABLED;
+        callbacks.onAppRecommendationsResponse(response);
     }
 
     @Override
     public void setThemeForApp(IWearableCallbacks callbacks, AppTheme theme) throws RemoteException {
-        Log.d(TAG, "unimplemented Method: setThemeForApp");
+        Log.d(TAG, "setThemeForApp: " + packageName);
+        context.getSharedPreferences(APP_THEME_PREFERENCES, Context.MODE_PRIVATE).edit()
+                .putString(packageName, Base64.encodeToString(SafeParcelableSerializer.serializeToBytes(getCanonicalTheme(theme)), Base64.NO_WRAP))
+                .apply();
+        callbacks.onStatus(Status.SUCCESS);
     }
 
     @Override
     public void getAppTheme(IWearableCallbacks callbacks, String packageName) throws RemoteException {
-        Log.d(TAG, "unimplemented Method: getAppTheme");
+        Log.d(TAG, "getAppTheme: " + packageName);
+        String stored = context.getSharedPreferences(APP_THEME_PREFERENCES, Context.MODE_PRIVATE).getString(packageName, null);
+        AppTheme theme = stored != null ? SafeParcelableSerializer.deserializeFromBytes(Base64.decode(stored, Base64.DEFAULT), AppTheme.CREATOR) : applyThemeDefaults(new AppTheme());
+        GetAppThemeResponse response = new GetAppThemeResponse();
+        response.statusCode = CommonStatusCodes.SUCCESS;
+        response.appTheme = theme;
+        callbacks.onGetAppThemeResponse(response);
     }
 
     @Override
     public void getCanonicalAppTheme(IWearableCallbacks callbacks, AppTheme theme) throws RemoteException {
-        Log.d(TAG, "unimplemented Method: getCanonicalAppTheme");
+        Log.d(TAG, "getCanonicalAppTheme");
+        GetAppThemeResponse response = new GetAppThemeResponse();
+        response.statusCode = CommonStatusCodes.SUCCESS;
+        response.appTheme = getCanonicalTheme(theme);
+        callbacks.onGetAppThemeResponse(response);
     }
 
     @Override
     public void logCounter(IWearableCallbacks callbacks, LogCounterRequest request) throws RemoteException {
         Log.d(TAG, "unimplemented Method: logCounter");
+        callbacks.onStatus(Status.SUCCESS);
     }
 
     @Override
     public void logEvent(IWearableCallbacks callbacks, LogEventRequest request) throws RemoteException {
         Log.d(TAG, "unimplemented Method: logEvent");
+        callbacks.onStatus(Status.SUCCESS);
     }
 
     @Override
     public void logTimer(IWearableCallbacks callbacks, LogTimerRequest request) throws RemoteException {
         Log.d(TAG, "unimplemented Method: logTimer");
+        callbacks.onStatus(Status.SUCCESS);
     }
 
     @Override
     public void flushLogs(IWearableCallbacks callbacks) throws RemoteException {
         Log.d(TAG, "unimplemented Method: flushLogs");
+        callbacks.onStatus(Status.SUCCESS);
     }
 
     @Override
     public void unknown85(IWearableCallbacks callbacks) throws RemoteException {
         Log.d(TAG, "unimplemented Method: unknown85");
+        BooleanResponse response = new BooleanResponse();
+        response.statusCode = WearableStatusCodes.FEATURE_DISABLED;
+        callbacks.onBooleanResponse(response);
     }
 
     @Override
     public void unknown118(IWearableCallbacks callbacks) throws RemoteException {
         Log.d(TAG, "unimplemented Method: unknown118");
+        BooleanResponse response = new BooleanResponse();
+        response.statusCode = WearableStatusCodes.FEATURE_DISABLED;
+        callbacks.onBooleanResponse(response);
     }
 
     private ConsentResponse getConsentResponse() {
@@ -850,6 +973,47 @@ public class WearableServiceImpl extends IWearableService.Stub {
             }
         }
         return response;
+    }
+
+    private static int inRange(int value, int max) {
+        return value < 0 || value > max ? 0 : value;
+    }
+
+    private static AppTheme applyThemeDefaults(AppTheme theme) {
+        if (theme.field1 == 0) theme.field1 = 1;
+        if (theme.field2 == 0) theme.field2 = 1;
+        if (theme.field3 == 0) theme.field3 = 1;
+        if (theme.field4 == 0) theme.field4 = 3;
+        return theme;
+    }
+
+    private static AppTheme getCanonicalTheme(AppTheme theme) {
+        AppTheme result = new AppTheme();
+        result.field1 = inRange(theme.field1, 3);
+        result.field2 = inRange(theme.field2, 2);
+        result.field3 = inRange(theme.field3, 2);
+        result.field4 = inRange(theme.field4, 3);
+        result.field5 = inRange(theme.field5, 1);
+        result.icon = new AppTheme.Icon();
+        if (theme.icon != null) result.icon.field1 = inRange(theme.icon.field1, 3);
+        result.headline = new AppTheme.Headline();
+        if (theme.headline != null) {
+            result.headline.field1 = inRange(theme.headline.field1, 3);
+            result.headline.field2 = inRange(theme.headline.field2, 2);
+            result.headline.field3 = inRange(theme.headline.field3, 3);
+        }
+        result.description = new AppTheme.Description();
+        if (theme.description != null) {
+            result.description.field1 = inRange(theme.description.field1, 3);
+            result.description.field2 = inRange(theme.description.field2, 2);
+        }
+        result.callToAction = new AppTheme.CallToAction();
+        if (theme.callToAction != null) {
+            result.callToAction.field1 = inRange(theme.callToAction.field1, 2);
+            result.callToAction.field2 = inRange(theme.callToAction.field2, 3);
+            result.callToAction.field3 = inRange(theme.callToAction.field3, 9);
+        }
+        return applyThemeDefaults(result);
     }
 
     private static boolean isHighPriority(MessageOptions options) {

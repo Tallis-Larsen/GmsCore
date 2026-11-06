@@ -12,6 +12,8 @@ import android.util.Log;
 import com.google.android.gms.common.api.CommonStatusCodes;
 import com.google.android.gms.wearable.internal.ChannelEventParcelable;
 import com.google.android.gms.wearable.internal.ChannelParcelable;
+import com.google.android.gms.wearable.internal.ChannelReceiveFileResponse;
+import com.google.android.gms.wearable.internal.ChannelSendFileResponse;
 import com.google.android.gms.wearable.internal.CloseChannelResponse;
 import com.google.android.gms.wearable.internal.GetChannelInputStreamResponse;
 import com.google.android.gms.wearable.internal.GetChannelOutputStreamResponse;
@@ -30,6 +32,7 @@ import org.microg.wearable.proto.ChannelRequest;
 import org.microg.wearable.proto.Request;
 import org.microg.wearable.proto.RootMessage;
 
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -47,7 +50,10 @@ public class ChannelManager {
     private static final long OPEN_TIMEOUT = 30000;
     private static final int MAX_PAYLOAD_SIZE = 8192;
 
+    private static final int EVENT_OPENED = 1;
     private static final int EVENT_CLOSED = 2;
+    private static final int EVENT_INPUT_CLOSED = 3;
+    private static final int EVENT_OUTPUT_CLOSED = 4;
     private static final int CLOSE_REASON_DISCONNECTED = 1;
     private static final int CLOSE_REASON_REMOTE_CLOSE = 2;
     private static final int CLOSE_REASON_LOCAL_CLOSE = 3;
@@ -68,7 +74,7 @@ public class ChannelManager {
             respondOpen(callbacks, CommonStatusCodes.ERROR, null);
             return;
         }
-        Channel channel = new Channel();
+        Channel channel = new Channel(true);
         channel.nodeId = targetNodeId;
         channel.packageName = packageName;
         channel.signatureDigest = PackageUtils.firstSignatureDigest(wearable.getContext(), packageName);
@@ -108,7 +114,7 @@ public class ChannelManager {
             send(channel, new ChannelRequest.Builder().control(new ChannelControlRequest.Builder()
                     .type(ChannelControlType.CHANNEL_CONTROL_CLOSE)
                     .channelId(channel.channelId)
-                    .fromChannelOpener(true)
+                    .fromChannelOpener(channel.opener)
                     .packageName(channel.packageName)
                     .signatureDigest(channel.signatureDigest)
                     .closeErrorCode(errorCode)
@@ -162,7 +168,7 @@ public class ChannelManager {
                         pipe = ParcelFileDescriptor.createPipe();
                         channel.outputCallbacks = streamCallbacks;
                         channel.outputStream = new ParcelFileDescriptor.AutoCloseInputStream(pipe[0]);
-                        channel.outputReader = new Thread(new OutputReader(channel, channel.outputStream), "WearChannelOut-" + channel.token);
+                        channel.outputReader = new Thread(new OutputReader(channel, channel.outputStream, -1), "WearChannelOut-" + channel.token);
                         channel.outputReader.start();
                     } catch (IOException e) {
                         Log.w(TAG, e);
@@ -176,6 +182,53 @@ public class ChannelManager {
             Log.w(TAG, e);
         } finally {
             closeQuietly(pipe != null ? pipe[1] : null);
+        }
+    }
+
+    public void writeInputToFd(String packageName, String token, ParcelFileDescriptor fd, IWearableCallbacks callbacks) {
+        Channel channel = getChannel(packageName, token);
+        boolean started = false;
+        if (channel != null) {
+            synchronized (channel) {
+                if (channel.inputWriter == null && !channel.closed) {
+                    channel.inputWriter = new Thread(new InputWriter(channel, new ParcelFileDescriptor.AutoCloseOutputStream(fd)), "WearChannelIn-" + channel.token);
+                    channel.inputWriter.start();
+                    started = true;
+                }
+            }
+        }
+        if (!started) closeQuietly(fd);
+        try {
+            callbacks.onChannelReceiveFileResponse(new ChannelReceiveFileResponse(started ? CommonStatusCodes.SUCCESS : CommonStatusCodes.ERROR));
+        } catch (RemoteException e) {
+            Log.w(TAG, e);
+        }
+    }
+
+    public void readOutputFromFd(String packageName, String token, ParcelFileDescriptor fd, long offset, long length, IWearableCallbacks callbacks) {
+        Channel channel = getChannel(packageName, token);
+        boolean started = false;
+        if (channel != null) {
+            synchronized (channel) {
+                if (channel.outputReader == null && !channel.closed) {
+                    try {
+                        FileInputStream in = new ParcelFileDescriptor.AutoCloseInputStream(fd);
+                        in.getChannel().position(offset);
+                        channel.outputStream = in;
+                        channel.outputReader = new Thread(new OutputReader(channel, in, length), "WearChannelOut-" + channel.token);
+                        channel.outputReader.start();
+                        started = true;
+                    } catch (IOException e) {
+                        Log.w(TAG, e);
+                    }
+                }
+            }
+        }
+        if (!started) closeQuietly(fd);
+        try {
+            callbacks.onChannelSendFileResponse(new ChannelSendFileResponse(started ? CommonStatusCodes.SUCCESS : CommonStatusCodes.ERROR));
+        } catch (RemoteException e) {
+            Log.w(TAG, e);
         }
     }
 
@@ -232,11 +285,49 @@ public class ChannelManager {
                 }
                 break;
             case CHANNEL_CONTROL_OPEN:
-                Log.w(TAG, "Channels opened by the peer are not supported yet: " + control.path);
+                onOpenRequest(control, channel, peerNodeId);
                 break;
             default:
                 Log.d(TAG, "Unknown channel control: " + control);
         }
+    }
+
+    private void onOpenRequest(ChannelControlRequest control, Channel channel, String peerNodeId) {
+        if (control.channelId == null || control.packageName == null || control.path == null) {
+            Log.d(TAG, "Invalid channel open request: " + control);
+            return;
+        }
+        boolean isNew = channel == null;
+        if (isNew) {
+            channel = new Channel(false);
+            channel.nodeId = peerNodeId;
+            channel.packageName = control.packageName;
+            channel.signatureDigest = control.signatureDigest;
+            channel.path = control.path;
+            channel.channelId = control.channelId;
+            channel.token = "chl-" + peerNodeId + "-" + Long.toHexString(channel.channelId);
+            synchronized (this) {
+                channelsByToken.put(channel.token, channel);
+                channelsByKey.put(channel.key(), channel);
+            }
+            Log.d(TAG, "Channel " + channel.token + " opened by peer for " + channel.path);
+        }
+        send(channel, new ChannelRequest.Builder().control(new ChannelControlRequest.Builder()
+                .type(ChannelControlType.CHANNEL_CONTROL_OPEN_ACK)
+                .channelId(channel.channelId)
+                .fromChannelOpener(false)
+                .allowOverMetered(true)
+                .build()));
+        if (isNew) sendEvent(channel, EVENT_OPENED, 0, 0);
+    }
+
+    private void sendEvent(Channel channel, int eventType, int closeReason, int errorCode) {
+        ChannelEventParcelable event = new ChannelEventParcelable();
+        event.channel = channel.toParcelable();
+        event.eventType = eventType;
+        event.closeReason = closeReason;
+        event.appSpecificErrorCode = errorCode;
+        wearable.sendChannelEvent(channel.packageName, channel.path, event);
     }
 
     private void onData(ChannelDataRequest data, String peerNodeId) {
@@ -375,12 +466,7 @@ public class ChannelManager {
                 Log.w(TAG, e);
             }
         }
-        ChannelEventParcelable event = new ChannelEventParcelable();
-        event.channel = channel.toParcelable();
-        event.eventType = EVENT_CLOSED;
-        event.closeReason = closeReason;
-        event.appSpecificErrorCode = errorCode;
-        wearable.sendChannelEvent(channel.packageName, channel.path, event);
+        sendEvent(channel, EVENT_CLOSED, closeReason, errorCode);
     }
 
     private static void respondOpen(IWearableCallbacks callbacks, int statusCode, Channel channel) {
@@ -441,6 +527,7 @@ public class ChannelManager {
                     out.write(payload);
                     out.flush();
                 }
+                if (!channel.closed) sendEvent(channel, EVENT_INPUT_CLOSED, 0, 0);
             } catch (IOException | InterruptedException e) {
                 Log.d(TAG, "Input stream of " + channel.token + " ended: " + e.getMessage());
             } finally {
@@ -456,21 +543,29 @@ public class ChannelManager {
         private final Channel channel;
         private final InputStream in;
 
-        private OutputReader(Channel channel, InputStream in) {
+        private final long length;
+
+        private OutputReader(Channel channel, InputStream in, long length) {
             this.channel = channel;
             this.in = in;
+            this.length = length;
         }
 
         @Override
         public void run() {
             byte[] buffer = new byte[MAX_PAYLOAD_SIZE];
             try {
+                long remaining = length;
                 int read;
-                while ((read = in.read(buffer)) >= 0) {
+                while (remaining != 0 && (read = in.read(buffer, 0, remaining < 0 ? buffer.length : (int) Math.min(buffer.length, remaining))) >= 0) {
                     if (channel.closed) return;
                     if (read > 0) waitForAck(channel, sendData(channel, buffer, read, false));
+                    if (remaining > 0) remaining -= read;
                 }
-                if (!channel.closed) sendData(channel, buffer, 0, true);
+                if (!channel.closed) {
+                    sendData(channel, buffer, 0, true);
+                    sendEvent(channel, EVENT_OUTPUT_CLOSED, 0, 0);
+                }
             } catch (IOException | InterruptedException e) {
                 Log.d(TAG, "Output stream of " + channel.token + " ended: " + e.getMessage());
             } finally {
@@ -489,7 +584,7 @@ public class ChannelManager {
         private String signatureDigest;
         private String path;
         private long channelId;
-        private final boolean opener = true;
+        private final boolean opener;
         private IWearableCallbacks openCallbacks;
         private Runnable openTimeout;
         private long nextDataRequestId;
@@ -501,6 +596,10 @@ public class ChannelManager {
         private IChannelStreamCallbacks inputCallbacks;
         private IChannelStreamCallbacks outputCallbacks;
         private volatile boolean closed;
+
+        private Channel(boolean opener) {
+            this.opener = opener;
+        }
 
         private String key() {
             return key(nodeId, channelId, opener);
