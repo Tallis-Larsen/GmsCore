@@ -228,7 +228,7 @@ public enum GmsService {
     SYSTEM_UPDATE_TV_API(207),
     CONTACT_SYNC(208, "com.google.android.gms.people.contactssync.service.START"),
     FEEDBACK_CAR(209),
-    SMARTDEVICE_SOURCE_DIRECT_TRANSFER(210),
+    SMARTDEVICE_SOURCE_DIRECT_TRANSFER(210, "com.google.android.gms.smartdevice.directtransfer.SourceDirectTransferService.START"),
     SMARTDEVICE_TARGET_DIRECT_TRANSFER(211),
     AUTH_API_IDENTITY_SIGNIN(212, "com.google.android.gms.auth.api.identity.service.signin.START"),
     IDENTITY_GIS_INTERNAL(213),

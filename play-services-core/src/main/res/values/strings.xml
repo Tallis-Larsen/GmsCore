@@ -320,6 +320,10 @@ Please set up a password, PIN, or pattern lock screen."</string>
     <string name="pref_workprofile_disclaimer">It is your responsibility to ensure that your usage of microG is in line with corporate policies.
         microG is provided on a best-effort basis and cannot guarantee to behave exactly as expected.</string>
 
+    <string name="smartdevice_confirm_transfer_title">Copy account to <xliff:g example="Google Pixel Watch 2">%1$s</xliff:g>?</string>
+    <string name="smartdevice_confirm_transfer_confirm">Confirm</string>
+    <string name="smartdevice_unknown_device">the other device</string>
+
     <string name="pref_auto_create_player">Allow Play Games account registration</string>
     <string name="pref_auto_create_player_intro">When playing games, you need to use a Play Games account to log in and record game-related functions, such as achievements, leaderboards, archives, etc. After disabling, Google accounts that are not bound to a Play Games account will not be automatically registered, and the game will not be able to log in and play.</string>
     <string name="pref_allow_upload_game_played">Allow uploading of game played</string>

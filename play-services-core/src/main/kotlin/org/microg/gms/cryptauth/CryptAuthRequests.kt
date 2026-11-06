@@ -31,7 +31,7 @@ internal const val CERTIFICATE = "58E1C4133F7441EC3D2C270270A14802DA47BA0E"
 internal const val CRYPTAUTH_FIELD_SESSION_ID = "randomSessionId"
 
 
-internal suspend fun Context.cryptAuthSyncKeys(authToken: String, instanceId: String, instanceToken: String, androidId: Long): JSONObject? {
+internal suspend fun Context.cryptAuthSyncKeys(authToken: String, instanceId: String, instanceToken: String, androidId: Long, syncSingleKeyRequests: JSONArray? = null): JSONObject? {
     // CryptAuth sync request tells server whether or not screenlock is enabled
 
     val deviceConfig = DeviceConfiguration(this)
@@ -71,12 +71,12 @@ internal suspend fun Context.cryptAuthSyncKeys(authToken: String, instanceId: St
     val jsonBody = jsonObjectOf(
         "applicationName" to Constants.GMS_PACKAGE_NAME,
         "clientVersion" to "1.0.0",
-        "syncSingleKeyRequests" to jsonArrayOf(
+        "syncSingleKeyRequests" to (syncSingleKeyRequests ?: jsonArrayOf(
             jsonObjectOf(
                 "keyName" to "PublicKey",
                 "keyHandles" to "ZGV2aWNlX2tleQo=" // base64 for `device_key`
             )
-        ),
+        )),
         "clientMetadata" to jsonObjectOf(
             "invocationReason" to "NEW_ACCOUNT"
         ),
@@ -86,11 +86,11 @@ internal suspend fun Context.cryptAuthSyncKeys(authToken: String, instanceId: St
     return cryptAuthQuery(CRYPTAUTH_BASE_URL + CRYPTAUTH_METHOD_SYNC_KEYS, authToken, jsonBody)
 }
 
-internal suspend fun Context.cryptAuthEnrollKeys(authToken: String, session: String): JSONObject? {
+internal suspend fun Context.cryptAuthEnrollKeys(authToken: String, session: String, enrollSingleKeyRequests: JSONArray = JSONArray(), clientEphemeralDh: String = ""): JSONObject? {
     val jsonBody = jsonObjectOf(
         CRYPTAUTH_FIELD_SESSION_ID to session,
-        "clientEphemeralDh" to "",
-        "enrollSingleKeyRequests" to JSONArray(),
+        "clientEphemeralDh" to clientEphemeralDh,
+        "enrollSingleKeyRequests" to enrollSingleKeyRequests,
     )
 
     return cryptAuthQuery(CRYPTAUTH_BASE_URL + CRYPTAUTH_METHOD_ENROLL_KEYS, authToken, jsonBody)

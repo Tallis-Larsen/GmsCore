@@ -1,0 +1,26 @@
+/*
+ * SPDX-FileCopyrightText: 2026 microG Project Team
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+option java_package = "org.microg.gms.smartdevice.proto";
+
+option java_multiple_files = true;
+
+message SourceDeviceSignals {
+  optional string android_id = 1;
+  optional string device = 2;
+  optional string model = 3;
+  optional string sdk_version = 4;
+  optional string gms_version = 5;
+  optional string droidguard_result = 6;
+  optional LockScreenSignals lock_screen = 7;
+}
+
+message LockScreenSignals {
+  optional bool secure = 1;
+  optional bool confirmed = 2;
+  optional int32 type = 3;
+  optional int64 seconds_since_unlock = 4;
+  optional int64 seconds_since_setup = 5;
+}

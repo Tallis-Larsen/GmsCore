@@ -951,6 +951,21 @@
             android:theme="@style/Theme.App.Translucent" />
 
         <activity
+            android:name="org.microg.gms.smartdevice.AccountChallengeActivity"
+            android:configChanges="keyboardHidden|keyboard|orientation|screenSize"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:process=":ui"
+            android:theme="@style/Theme.App" />
+
+        <activity
+            android:name="org.microg.gms.smartdevice.ConfirmTransferActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:process=":ui"
+            android:theme="@style/Theme.App.Translucent" />
+
+        <activity
             android:name="org.microg.gms.ui.GoogleMoreFragment$AsActivity"
             android:label="@string/gms_settings_name"
             android:process=":ui"
@@ -1363,6 +1378,22 @@
         </service>
 
         <service
+            android:name="org.microg.gms.auth.aang.GoogleAuthAangService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.google.android.gms.auth.aang.events.services.START" />
+            </intent-filter>
+        </service>
+
+        <service
+            android:name="org.microg.gms.smartdevice.SourceDirectTransferService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.google.android.gms.smartdevice.directtransfer.SourceDirectTransferService.START" />
+            </intent-filter>
+        </service>
+
+        <service
             android:name="org.microg.gms.findmydevice.AlarmRingService"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
@@ -1510,7 +1541,6 @@
                 <action android:name="com.google.android.gms.setup.auth.SecondDeviceAuth.START" />
                 <action android:name="com.google.android.gms.smartdevice.d2d.SourceDeviceService.START" />
                 <action android:name="com.google.android.gms.smartdevice.d2d.TargetDeviceService.START" />
-                <action android:name="com.google.android.gms.smartdevice.directtransfer.SourceDirectTransferService.START" />
                 <action android:name="com.google.android.gms.smartdevice.directtransfer.TargetDirectTransferService.START" />
                 <action android:name="com.google.android.gms.smartdevice.postsetup.PostSetupService.START" />
                 <action android:name="com.google.android.gms.smartdevice.setup.accounts.AccountsService.START" />

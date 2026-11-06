@@ -32,4 +32,8 @@
         <item quantity="one">Request missing permission</item>
         <item quantity="other">Request missing permissions</item>
     </plurals>
+    <plurals name="smartdevice_copying_accounts">
+        <item quantity="one">Copying account…</item>
+        <item quantity="other">Copying accounts…</item>
+    </plurals>
 </resources>
