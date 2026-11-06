@@ -92,6 +92,8 @@ import static android.os.Build.VERSION.SDK_INT;
 public class WearableImpl {
 
     private static final String TAG = "GmsWear";
+    private static final String CAPABILITY_RINGABLE = "mdm/ringable";
+    private static final byte[] CAPABILITY_DATA_STATIC = {'s'};
 
     private static final int WEAR_TCP_PORT = 5601;
 
@@ -127,6 +129,7 @@ public class WearableImpl {
             Looper.prepare();
             networkHandler = new Handler(Looper.myLooper());
             networkHandlerLock.countDown();
+            publishStaticCapabilities();
             Looper.loop();
         }).start();
         for (ConnectionConfiguration config : getConfigurations()) {
@@ -826,6 +829,16 @@ public class WearableImpl {
         return record;
     }
 
+    private void publishStaticCapabilities() {
+        String path = CapabilityManager.PATH_PREFIX + Constants.GMS_PACKAGE_NAME + "/" + Constants.GMS_PACKAGE_SIGNATURE_SHA1 + "/" + Uri.encode(CAPABILITY_RINGABLE);
+        DataItemRecord record = getGmsDataItem(path);
+        if (record == null || record.deleted) putGmsDataItem(path, CAPABILITY_DATA_STATIC);
+    }
+
+    public void sendGmsMessage(String nodeId, String path) {
+        networkHandler.post(() -> sendMessage(Constants.GMS_PACKAGE_NAME, Constants.GMS_PACKAGE_SIGNATURE_SHA1, nodeId, path, new byte[0], false));
+    }
+
     public DataItemRecord getGmsDataItem(String path) {
         Cursor cursor = nodeDatabase.getDataItemsByHostAndPath(Constants.GMS_PACKAGE_NAME, Constants.GMS_PACKAGE_SIGNATURE_SHA1, getLocalNodeId(), path);
         DataItemRecord record = null;
@@ -903,6 +916,10 @@ public class WearableImpl {
     }
 
     public int sendMessage(String packageName, String targetNodeId, String path, byte[] data, boolean highPriority) {
+        return sendMessage(packageName, PackageUtils.firstSignatureDigest(context, packageName), targetNodeId, path, data, highPriority);
+    }
+
+    private int sendMessage(String packageName, String signatureDigest, String targetNodeId, String path, byte[] data, boolean highPriority) {
         if (activeConnections.containsKey(targetNodeId)) {
             WearableConnection connection = activeConnections.get(targetNodeId);
             RpcHelper.RpcConnectionState state = rpcHelper.useConnectionState(packageName, targetNodeId, path, highPriority);
@@ -913,7 +930,7 @@ public class WearableImpl {
                         .path(path)
                         .rawData(ByteString.of(data))
                         .packageName(packageName)
-                        .signatureDigest(PackageUtils.firstSignatureDigest(context, packageName))
+                        .signatureDigest(signatureDigest)
                         .sourceNodeId(getLocalNodeId())
                         .generation(state.generation)
                         .requestId(state.lastRequestId)

@@ -110,6 +110,11 @@ public class WearableService extends BaseService {
         wearable.stop();
     }
 
+    public static void sendGmsMessage(String nodeId, String path) {
+        WearableImpl wearable = activeWearable;
+        if (wearable != null) wearable.sendGmsMessage(nodeId, path);
+    }
+
     public static List<String> getConnectedNodeNames() {
         WearableImpl wearable = activeWearable;
         if (wearable == null) return Collections.emptyList();
