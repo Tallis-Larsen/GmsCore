@@ -20,10 +20,13 @@ import android.Manifest;
 import android.app.Activity;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothManager;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
+import android.content.res.Resources;
 import android.content.pm.ResolveInfo;
 import android.database.Cursor;
 import android.net.Uri;
@@ -93,7 +96,6 @@ public class WearableImpl {
 
     private static final String TAG = "GmsWear";
     private static final String CAPABILITY_RINGABLE = "mdm/ringable";
-    private static final byte[] CAPABILITY_DATA_STATIC = {'s'};
 
     private static final int WEAR_TCP_PORT = 5601;
 
@@ -135,7 +137,20 @@ public class WearableImpl {
         for (ConnectionConfiguration config : getConfigurations()) {
             if (config.enabled) startBluetoothConnection(config);
         }
+        IntentFilter packageFilter = new IntentFilter();
+        packageFilter.addAction(Intent.ACTION_PACKAGE_ADDED);
+        packageFilter.addAction(Intent.ACTION_PACKAGE_REPLACED);
+        packageFilter.addAction(Intent.ACTION_PACKAGE_REMOVED);
+        packageFilter.addDataScheme("package");
+        ContextCompat.registerReceiver(context, packageChangeReceiver, packageFilter, ContextCompat.RECEIVER_EXPORTED);
     }
+
+    private final BroadcastReceiver packageChangeReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (networkHandler != null) networkHandler.post(WearableImpl.this::publishStaticCapabilities);
+        }
+    };
 
     public RpcManager getRpcManager() {
         return rpcManager;
@@ -830,9 +845,44 @@ public class WearableImpl {
     }
 
     private void publishStaticCapabilities() {
-        String path = CapabilityManager.PATH_PREFIX + Constants.GMS_PACKAGE_NAME + "/" + Constants.GMS_PACKAGE_SIGNATURE_SHA1 + "/" + Uri.encode(CAPABILITY_RINGABLE);
-        DataItemRecord record = getGmsDataItem(path);
-        if (record == null || record.deleted) putGmsDataItem(path, CAPABILITY_DATA_STATIC);
+        Set<String> paths = new HashSet<>();
+        paths.add(CapabilityManager.getPath(Constants.GMS_PACKAGE_NAME, Constants.GMS_PACKAGE_SIGNATURE_SHA1, CAPABILITY_RINGABLE));
+        for (ApplicationInfo app : context.getPackageManager().getInstalledApplications(0)) {
+            if (Constants.GMS_PACKAGE_NAME.equals(app.packageName)) continue;
+            String signature = PackageUtils.firstSignatureDigest(context, app.packageName);
+            if (signature == null) continue;
+            for (String capability : getDeclaredCapabilities(app.packageName)) {
+                paths.add(CapabilityManager.getPath(app.packageName, signature, capability));
+            }
+        }
+        List<String> stale = new ArrayList<>();
+        DataHolder dataHolder = getGmsDataItems(CapabilityManager.PATH_PREFIX);
+        for (int i = 0; i < dataHolder.getCount(); i++) {
+            if (!getLocalNodeId().equals(dataHolder.getString("host", i, 0))) continue;
+            if (!Arrays.equals(CapabilityManager.DATA_STATIC, dataHolder.getByteArray("data", i, 0))) continue;
+            String path = dataHolder.getString("path", i, 0);
+            if (!paths.remove(path)) stale.add(path);
+        }
+        dataHolder.close();
+        for (String path : stale) {
+            deleteGmsDataItem(path);
+        }
+        for (String path : paths) {
+            DataItemRecord record = getGmsDataItem(path);
+            if (record == null || record.deleted) putGmsDataItem(path, CapabilityManager.DATA_STATIC);
+        }
+        Log.d(TAG, "Static capabilities: " + stale.size() + " removed, " + paths.size() + " checked");
+    }
+
+    private List<String> getDeclaredCapabilities(String packageName) {
+        try {
+            Resources resources = context.getPackageManager().getResourcesForApplication(packageName);
+            int id = resources.getIdentifier("android_wear_capabilities", "array", packageName);
+            if (id != 0) return Arrays.asList(resources.getStringArray(id));
+        } catch (PackageManager.NameNotFoundException | RuntimeException e) {
+            Log.w(TAG, "Could not read capabilities of " + packageName, e);
+        }
+        return Collections.emptyList();
     }
 
     public void sendGmsMessage(String nodeId, String path) {
@@ -948,6 +998,7 @@ public class WearableImpl {
     }
 
     public void stop() {
+        context.unregisterReceiver(packageChangeReceiver);
         synchronized (bluetoothThreads) {
             for (BluetoothConnectionThread thread : bluetoothThreads.values()) {
                 thread.close();

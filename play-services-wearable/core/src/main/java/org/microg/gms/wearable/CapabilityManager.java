@@ -34,6 +34,7 @@ import java.util.Map;
 
 public class CapabilityManager {
     public static final String PATH_PREFIX = "/capabilities/";
+    public static final byte[] DATA_STATIC = {'s'};
     private static final byte[] DATA_DYNAMIC = {'d'};
     private static final int FILTER_REACHABLE = 1;
 
@@ -43,6 +44,10 @@ public class CapabilityManager {
     public CapabilityManager(Context context, WearableImpl wearable, String packageName) {
         this.wearable = wearable;
         this.prefix = PATH_PREFIX + packageName + "/" + PackageUtils.firstSignatureDigest(context, packageName) + "/";
+    }
+
+    public static String getPath(String packageName, String signatureDigest, String capability) {
+        return PATH_PREFIX + packageName + "/" + signatureDigest + "/" + Uri.encode(capability);
     }
 
     private String getPath(String capability) {
