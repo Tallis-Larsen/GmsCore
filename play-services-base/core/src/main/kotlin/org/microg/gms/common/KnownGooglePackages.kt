@@ -229,6 +229,12 @@ private val KNOWN_GOOGLE_PACKAGES = mapOf(
         setOf(ACCOUNT, AUTH, OWNER)
     ),
 
+    // Pixel Watch
+    Pair(
+        PackageAndCertHash("com.google.android.apps.wear.companion", SHA256, "48ed0058d1b6638e39a6e4c2df1c4d5fdf593f696bf31b09a88f93141eaf600f"),
+        setOf(ACCOUNT, AUTH, OWNER)
+    ),
+
 )
 
 fun isGooglePackage(pkg: PackageAndCertHash): Boolean {

@@ -300,6 +300,18 @@ object SettingsContract {
         )
     }
 
+    object Wearable {
+        const val ID = "wearable"
+        fun getContentUri(context: Context) = Uri.withAppendedPath(getAuthorityUri(context), ID)
+        fun getContentType(context: Context) = "vnd.android.cursor.item/vnd.${getAuthority(context)}.$ID"
+
+        const val KEEP_CONNECTED = "wearable_keep_connected"
+
+        val PROJECTION = arrayOf(
+            KEEP_CONNECTED
+        )
+    }
+
     object WorkProfile {
         const val ID = "workprofile"
         fun getContentUri(context: Context) = Uri.withAppendedPath(getCrossProfileSharedAuthorityUri(context), ID)

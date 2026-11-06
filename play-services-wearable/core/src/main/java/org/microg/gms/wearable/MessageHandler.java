@@ -45,8 +45,11 @@ import java.util.Arrays;
 public class MessageHandler extends ServerMessageListener {
     private static final String TAG = "GmsWearMsgHandler";
     private final WearableImpl wearable;
+    private final String configName;
     private final String oldConfigNodeId;
     private String peerNodeId;
+    private boolean syncStarted;
+    private SyncStart pendingPeerSyncStart;
 
     public MessageHandler(Context context, WearableImpl wearable, ConnectionConfiguration config) {
         this(wearable, config, Build.MODEL, config.nodeId, SettingsContract.getSettings(context, SettingsContract.CheckIn.INSTANCE.getContentUri(context), new String[]{SettingsContract.CheckIn.ANDROID_ID}, cursor -> cursor.getLong(0)));
@@ -59,17 +62,31 @@ public class MessageHandler extends ServerMessageListener {
                 .networkId(networkId)
                 .peerAndroidId(androidId)
                 .unknown4(3)
-                .peerVersion(1)
+                .peerVersion(2)
+                .androidSdkVersion(android.os.Build.VERSION.SDK_INT)
                 .build());
         this.wearable = wearable;
+        this.configName = config.name;
         this.oldConfigNodeId = config.nodeId;
     }
 
     @Override
-    public void onConnect(Connect connect) {
+    public synchronized void onConnect(Connect connect) {
         super.onConnect(connect);
         peerNodeId = connect.id;
-        wearable.onConnectReceived(getConnection(), oldConfigNodeId, connect);
+        syncStarted = false;
+        pendingPeerSyncStart = null;
+        wearable.onConnectReceived(getConnection(), configName, connect);
+        if (wearable.isDataSyncEnabled(configName)) {
+            startDataSync();
+        } else {
+            Log.d(TAG, "Holding data sync with " + peerNodeId + " until it is enabled");
+        }
+    }
+
+    public synchronized void startDataSync() {
+        if (getConnection() == null || peerNodeId == null || syncStarted) return;
+        syncStarted = true;
         try {
             getConnection().writeMessage(new RootMessage.Builder().syncStart(new SyncStart.Builder()
                     .receivedSeqId(-1L)
@@ -82,6 +99,11 @@ public class MessageHandler extends ServerMessageListener {
         } catch (IOException e) {
             Log.w(TAG, e);
         }
+        if (pendingPeerSyncStart != null) {
+            SyncStart syncStart = pendingPeerSyncStart;
+            pendingPeerSyncStart = null;
+            onSyncStart(syncStart);
+        }
     }
 
     @Override
@@ -90,6 +112,7 @@ public class MessageHandler extends ServerMessageListener {
         if (connect == null)
             connect = new Connect.Builder().id(oldConfigNodeId).name("Wear device").build();
         wearable.onDisconnectReceived(getConnection(), connect);
+        peerNodeId = null;
         super.onDisconnected();
     }
 
@@ -116,8 +139,12 @@ public class MessageHandler extends ServerMessageListener {
     }
 
     @Override
-    public void onSyncStart(SyncStart syncStart) {
+    public synchronized void onSyncStart(SyncStart syncStart) {
         Log.d(TAG, "onSyncStart: " + syncStart);
+        if (!syncStarted) {
+            pendingPeerSyncStart = syncStart;
+            return;
+        }
         if (syncStart.version < 2) {
             Log.d(TAG, "Sync uses version " + syncStart.version + " which is not supported (yet)");
         }
@@ -143,6 +170,14 @@ public class MessageHandler extends ServerMessageListener {
     public void onRpcRequest(Request rpcRequest) {
         Log.d(TAG, "onRpcRequest: " + rpcRequest);
         if (TextUtils.isEmpty(rpcRequest.targetNodeId) || rpcRequest.targetNodeId.equals(wearable.getLocalNodeId())) {
+            if (rpcRequest.responseTo != null) {
+                wearable.getRpcManager().onResponseReceived(rpcRequest);
+                return;
+            }
+            if (rpcRequest.expectsResponse != null && rpcRequest.expectsResponse) {
+                wearable.getRpcManager().onRequestReceived(rpcRequest, peerNodeId);
+                return;
+            }
             MessageEventParcelable messageEvent = new MessageEventParcelable();
             messageEvent.data = rpcRequest.rawData != null ? rpcRequest.rawData.toByteArray() : null;
             messageEvent.path = rpcRequest.path;
@@ -176,5 +211,6 @@ public class MessageHandler extends ServerMessageListener {
     @Override
     public void onChannelRequest(Request channelRequest) {
         Log.d(TAG, "onChannelRequest:" + channelRequest);
+        wearable.getChannelManager().onChannelRequest(channelRequest, peerNodeId);
     }
 }

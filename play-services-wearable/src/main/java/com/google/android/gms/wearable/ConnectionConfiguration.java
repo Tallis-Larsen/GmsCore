@@ -52,11 +52,11 @@ public class ConnectionConfiguration extends AutoSafeParcelable {
     @SafeParceled(14)
     public boolean migrating;
     @SafeParceled(15)
-    public boolean dataItemSyncEnabled;
+    public boolean dataItemSyncEnabled = true;
     @SafeParceled(16)
     public ConnectionRestrictions connectionRestrictions;
     @SafeParceled(17)
-    public boolean removeConnectionWhenBondRemovedByUser;
+    public boolean removeConnectionWhenBondRemovedByUser = true;
     @SafeParceled(18)
     public ConnectionDelayFilters connectionDelayFilters;
     @SafeParceled(19)

@@ -19,7 +19,7 @@ package org.microg.gms.wearable;
 import android.content.Context;
 import android.content.SharedPreferences;
 
-import java.util.UUID;
+import java.util.Random;
 
 public class ClockworkNodePreferences {
 
@@ -40,8 +40,8 @@ public class ClockworkNodePreferences {
     public String getLocalNodeId() {
         SharedPreferences preferences = context.getSharedPreferences(CLOCKWORK_NODE_PREFERENCES, Context.MODE_PRIVATE);
         String nodeId = preferences.getString(CLOCKWORK_NODE_PREFERENCE_NODE_ID, null);
-        if (nodeId == null) {
-            nodeId = UUID.randomUUID().toString();
+        if (nodeId == null || nodeId.contains("-")) {
+            nodeId = Integer.toHexString(new Random().nextInt());
             preferences.edit().putString(CLOCKWORK_NODE_PREFERENCE_NODE_ID, nodeId).apply();
         }
         return nodeId;

@@ -11,11 +11,11 @@ public class Term extends AutoSafeParcelable {
     @Field(1)
     public int termType;
     @Field(2)
-    public String field2;
+    public String text;
     @Field(3)
     public boolean isExplicitConsent;
     @Field(4)
-    public String field4;
+    public String title;
     @Field(5)
     public String field5;
     @Field(6)

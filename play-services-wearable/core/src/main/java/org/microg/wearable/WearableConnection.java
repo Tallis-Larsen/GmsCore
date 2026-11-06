@@ -7,6 +7,7 @@ package org.microg.wearable;
 
 import org.microg.wearable.proto.Connect;
 import org.microg.wearable.proto.MessagePiece;
+import org.microg.wearable.proto.Request;
 import org.microg.wearable.proto.RootMessage;
 
 import java.io.ByteArrayOutputStream;
@@ -50,14 +51,25 @@ public abstract class WearableConnection implements Runnable {
         }
     }
 
-    public void writeMessage(RootMessage message) throws IOException {
+    public synchronized void writeMessage(RootMessage message) throws IOException {
         byte[] bytes = message.encode();
         // TODO: cut in pieces
         writeMessagePiece(new MessagePiece.Builder()
                 .data_(ByteString.of(bytes))
                 .digest(calculateDigest(bytes))
                 .thisPiece(1)
-                .totalPieces(1).build());
+                .totalPieces(1)
+                .queueId(getQueueId(message)).build());
+    }
+
+    private static int getQueueId(RootMessage message) {
+        if (message.syncStart != null || message.setDataItem != null) return 3;
+        if (message.setAsset != null) return 5;
+        if (message.ackAsset != null || message.fetchAsset != null) return 7;
+        if (message.channelRequest != null) return 9;
+        Request request = message.rpcRequest != null ? message.rpcRequest : message.request18;
+        if (request != null) return request.priority != null && request.priority == 2 ? 10 : 4;
+        return 0;
     }
 
     protected abstract void writeMessagePiece(MessagePiece piece) throws IOException;

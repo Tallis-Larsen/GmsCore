@@ -16,6 +16,7 @@
 
 package org.microg.gms.wearable;
 
+import android.content.Intent;
 import android.os.RemoteException;
 
 import com.google.android.gms.common.Feature;
@@ -23,11 +24,19 @@ import com.google.android.gms.common.api.CommonStatusCodes;
 import com.google.android.gms.common.internal.ConnectionInfo;
 import com.google.android.gms.common.internal.GetServiceRequest;
 import com.google.android.gms.common.internal.IGmsCallbacks;
+import com.google.android.gms.wearable.internal.NodeParcelable;
 
 import org.microg.gms.BaseService;
+import org.microg.gms.common.ForegroundServiceContext;
+import org.microg.gms.common.ForegroundServiceInfo;
 import org.microg.gms.common.GmsService;
 import org.microg.gms.common.PackageUtils;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
+@ForegroundServiceInfo(value = "Wear OS", resName = "service_name_wearable", resPackage = "com.google.android.gms")
 public class WearableService extends BaseService {
 
     public static final Feature[] FEATURES = new Feature[]{
@@ -66,6 +75,7 @@ public class WearableService extends BaseService {
             new Feature("wear_notify_channel_flushed", 1L)
     };
 
+    private static WearableImpl activeWearable;
     private WearableImpl wearable;
 
     public WearableService() {
@@ -78,12 +88,36 @@ public class WearableService extends BaseService {
         ConfigurationDatabaseHelper configurationDatabaseHelper = new ConfigurationDatabaseHelper(getApplicationContext());
         NodeDatabaseHelper nodeDatabaseHelper = new NodeDatabaseHelper(getApplicationContext());
         wearable = new WearableImpl(getApplicationContext(), nodeDatabaseHelper, configurationDatabaseHelper);
+        activeWearable = wearable;
+    }
+
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        super.onStartCommand(intent, flags, startId);
+        ForegroundServiceContext.completeForegroundService(this, intent, TAG);
+        if (WearablePreferences.isKeepConnected(this) && wearable.hasBluetoothConnections()) {
+            wearable.retryBluetoothConnections();
+            return START_STICKY;
+        }
+        stopSelf(startId);
+        return START_NOT_STICKY;
     }
 
     @Override
     public void onDestroy() {
         super.onDestroy();
+        if (activeWearable == wearable) activeWearable = null;
         wearable.stop();
+    }
+
+    public static List<String> getConnectedNodeNames() {
+        WearableImpl wearable = activeWearable;
+        if (wearable == null) return Collections.emptyList();
+        List<String> names = new ArrayList<>();
+        for (NodeParcelable node : wearable.getConnectedNodesParcelableList()) {
+            names.add(node.getDisplayName());
+        }
+        return names;
     }
 
     @Override

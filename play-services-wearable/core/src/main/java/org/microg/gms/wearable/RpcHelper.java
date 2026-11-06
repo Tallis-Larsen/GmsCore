@@ -32,15 +32,19 @@ public class RpcHelper {
         this.preferences = context.getSharedPreferences("wearable.rpc_service.settings", 0);
     }
 
-    private String getRpcConnectionId(String packageName, String targetNodeId, String path) {
+    private String getRpcConnectionId(String packageName, String targetNodeId, String path, boolean highPriority) {
         String mode = "lo";
-        if (packageName.equals("com.google.android.wearable.app") && path.startsWith("/s3"))
+        if (highPriority || packageName.equals("com.google.android.wearable.app") && path.startsWith("/s3"))
             mode = "hi";
         return targetNodeId + ":" + mode;
     }
 
     public RpcHelper.RpcConnectionState useConnectionState(String packageName, String targetNodeId, String path) {
-        String rpcConnectionId = getRpcConnectionId(packageName, targetNodeId, path);
+        return useConnectionState(packageName, targetNodeId, path, false);
+    }
+
+    public RpcHelper.RpcConnectionState useConnectionState(String packageName, String targetNodeId, String path, boolean highPriority) {
+        String rpcConnectionId = getRpcConnectionId(packageName, targetNodeId, path, highPriority);
         synchronized (rpcStateMap) {
             if (!rpcStateMap.containsKey(rpcConnectionId)) {
                 int g = preferences.getInt(rpcConnectionId, 1)+1;

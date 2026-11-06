@@ -186,3 +186,9 @@ message ChannelDataAckRequest {
     optional ChannelDataHeader header = 1;
     optional bool finalMessage = 2;
 }
+
+message PrivacySettings {
+    optional bool loggingOptIn = 1;
+    optional bool cloudSyncOptIn = 2;
+    optional bool locationOptIn = 3;
+}

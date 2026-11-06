@@ -62,4 +62,5 @@ public class WearableStatusCodes extends CommonStatusCodes {
      * Indicates that the WiFi credential sync no credential fetched.
      */
     public static final int WIFI_CREDENTIAL_SYNC_NO_CREDENTIAL_FETCHED = 4008;
+    public static final int FEATURE_DISABLED = 4014;
 }

@@ -16,29 +16,41 @@
 
 package org.microg.gms.wearable;
 
+import android.Manifest;
+import android.app.Activity;
+import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.Message;
+import android.os.Messenger;
 import android.os.RemoteException;
 import android.text.TextUtils;
 import android.util.Base64;
 import android.util.Log;
 
 import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
 
 import com.google.android.gms.common.data.DataHolder;
 import com.google.android.gms.wearable.Asset;
 import com.google.android.gms.wearable.ConnectionConfiguration;
 import com.google.android.gms.wearable.Node;
+import com.google.android.gms.wearable.internal.ChannelEventParcelable;
+import com.google.android.gms.wearable.internal.IRpcResponseCallback;
 import com.google.android.gms.wearable.internal.IWearableListener;
 import com.google.android.gms.wearable.internal.MessageEventParcelable;
 import com.google.android.gms.wearable.internal.NodeParcelable;
 import com.google.android.gms.wearable.internal.PutDataRequest;
 
+import org.microg.gms.common.Constants;
 import org.microg.gms.common.PackageUtils;
 import org.microg.gms.common.RemoteListenerProxy;
 import org.microg.gms.common.Utils;
@@ -69,9 +81,12 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 
 import okio.ByteString;
+
+import static android.os.Build.VERSION.SDK_INT;
 
 public class WearableImpl {
 
@@ -84,9 +99,15 @@ public class WearableImpl {
     private final ConfigurationDatabaseHelper configDatabase;
     private final Map<String, List<ListenerInfo>> listeners = new HashMap<String, List<ListenerInfo>>();
     private final Set<Node> connectedNodes = new HashSet<Node>();
-    private final Map<String, WearableConnection> activeConnections = new HashMap<String, WearableConnection>();
+    private final Map<String, WearableConnection> activeConnections = new ConcurrentHashMap<String, WearableConnection>();
+    private final Map<String, String> activeConfigNames = new ConcurrentHashMap<String, String>();
+    private final Map<String, BluetoothConnectionThread> bluetoothThreads = new HashMap<String, BluetoothConnectionThread>();
+    private final Map<String, MessageHandler> messageHandlers = new HashMap<String, MessageHandler>();
     private RpcHelper rpcHelper;
+    private final RpcManager rpcManager;
+    private final ChannelManager channelManager;
     private SocketConnectionThread sct;
+    private boolean permissionRequestActive;
     private ConnectionConfiguration[] configurations;
     private boolean configurationsUpdated = false;
     private ClockworkNodePreferences clockworkNodePreferences;
@@ -99,12 +120,25 @@ public class WearableImpl {
         this.configDatabase = configDatabase;
         this.clockworkNodePreferences = new ClockworkNodePreferences(context);
         this.rpcHelper = new RpcHelper(context);
+        this.rpcManager = new RpcManager(this, rpcHelper);
+        this.channelManager = new ChannelManager(this);
         new Thread(() -> {
             Looper.prepare();
             networkHandler = new Handler(Looper.myLooper());
             networkHandlerLock.countDown();
             Looper.loop();
         }).start();
+        for (ConnectionConfiguration config : getConfigurations()) {
+            if (config.enabled) startBluetoothConnection(config);
+        }
+    }
+
+    public RpcManager getRpcManager() {
+        return rpcManager;
+    }
+
+    public ChannelManager getChannelManager() {
+        return channelManager;
     }
 
     public String getLocalNodeId() {
@@ -218,14 +252,18 @@ public class WearableImpl {
     }
 
     private void addConnectedNode(Node node) {
-        connectedNodes.add(node);
+        synchronized (connectedNodes) {
+            connectedNodes.add(node);
+        }
         onConnectedNodes(getConnectedNodesParcelableList());
     }
 
     private void removeConnectedNode(String nodeId) {
-        for (Node connectedNode : new ArrayList<Node>(connectedNodes)) {
-            if (connectedNode.getId().equals(nodeId))
-                connectedNodes.remove(connectedNode);
+        synchronized (connectedNodes) {
+            for (Node connectedNode : new ArrayList<Node>(connectedNodes)) {
+                if (connectedNode.getId().equals(nodeId))
+                    connectedNodes.remove(connectedNode);
+            }
         }
         onConnectedNodes(getConnectedNodesParcelableList());
     }
@@ -250,7 +288,9 @@ public class WearableImpl {
 
     void syncRecordToAll(DataItemRecord record) {
         for (String nodeId : new ArrayList<String>(activeConnections.keySet())) {
-            syncRecordToPeer(nodeId, record);
+            if (isDataSyncEnabled(activeConfigNames.get(nodeId))) {
+                syncRecordToPeer(nodeId, record);
+            }
         }
     }
 
@@ -337,12 +377,12 @@ public class WearableImpl {
         }
     }
 
-    public void onConnectReceived(WearableConnection connection, String nodeId, Connect connect) {
+    public void onConnectReceived(WearableConnection connection, String configName, Connect connect) {
         for (ConnectionConfiguration config : getConfigurations()) {
-            if (config.nodeId.equals(nodeId)) {
-                if (config.nodeId != nodeId) {
+            if (configName != null && configName.equals(config.name)) {
+                if (!connect.id.equals(config.nodeId)) {
                     config.nodeId = connect.id;
-                    configDatabase.putConfiguration(config, nodeId);
+                    configDatabase.putConfiguration(config);
                 }
                 config.peerNodeId = connect.id;
                 config.connected = true;
@@ -350,6 +390,7 @@ public class WearableImpl {
         }
         Log.d(TAG, "Adding connection to list of open connections: " + connection + " with connect " + connect);
         activeConnections.put(connect.id, connection);
+        activeConfigNames.put(connect.id, configName);
         onPeerConnected(new NodeParcelable(connect.id, connect.name));
         // Fetch missing assets
         Cursor cursor = nodeDatabase.listMissingAssets();
@@ -381,13 +422,17 @@ public class WearableImpl {
         }
         Log.d(TAG, "Removing connection from list of open connections: " + connection);
         activeConnections.remove(connect.id);
+        activeConfigNames.remove(connect.id);
+        channelManager.onPeerDisconnected(connect.id);
         onPeerDisconnected(new NodeParcelable(connect.id, connect.name));
     }
 
     public List<NodeParcelable> getConnectedNodesParcelableList() {
         List<NodeParcelable> nodes = new ArrayList<NodeParcelable>();
-        for (Node connectedNode : connectedNodes) {
-            nodes.add(new NodeParcelable(connectedNode));
+        synchronized (connectedNodes) {
+            for (Node connectedNode : connectedNodes) {
+                nodes.add(new NodeParcelable(connectedNode));
+            }
         }
         return nodes;
     }
@@ -398,6 +443,7 @@ public class WearableImpl {
 
     private void invokeListeners(@Nullable Intent intent, ListenerInvoker invoker) {
         for (String packageName : new ArrayList<>(listeners.keySet())) {
+            if (intent != null && intent.getPackage() != null && !intent.getPackage().equals(packageName)) continue;
             List<ListenerInfo> listeners = this.listeners.get(packageName);
             if (listeners == null) continue;
             for (int i = 0; i < listeners.size(); i++) {
@@ -422,10 +468,14 @@ public class WearableImpl {
             }
         }
         if (intent != null) {
-            try {
-                invoker.invoke(RemoteListenerProxy.get(context, intent, IWearableListener.class, "com.google.android.gms.wearable.BIND_LISTENER"));
-            } catch (RemoteException e) {
-                Log.w(TAG, "Failed to deliver message received to " + intent, e);
+            List<ResolveInfo> services = context.getPackageManager().queryIntentServices(intent, 0);
+            for (ResolveInfo service : services) {
+                Intent serviceIntent = new Intent(intent).setClassName(service.serviceInfo.packageName, service.serviceInfo.name);
+                try {
+                    invoker.invoke(RemoteListenerProxy.get(context, serviceIntent, IWearableListener.class, "com.google.android.gms.wearable.BIND_LISTENER"));
+                } catch (RemoteException e) {
+                    Log.w(TAG, "Failed to deliver event to " + serviceIntent, e);
+                }
             }
         }
     }
@@ -481,7 +531,7 @@ public class WearableImpl {
         } catch (Exception e) {
             return null;
         }
-        Cursor dataHolderItems = nodeDatabase.getDataItemsForDataHolderByHostAndPath(packageName, firstSignature, fixHost(uri.getHost(), false), uri.getPath());
+        Cursor dataHolderItems = nodeDatabase.getDataItemsForDataHolderByHostAndPath(packageName, firstSignature, "*".equals(uri.getHost()) ? null : fixHost(uri.getHost(), false), uri.getPath());
         DataHolder dataHolder = new DataHolder(dataHolderItems, 0, null);
         Log.d(TAG, "Returning data holder of size " + dataHolder.getCount() + " for query " + uri);
         return dataHolder;
@@ -512,6 +562,12 @@ public class WearableImpl {
             Log.d(TAG, "Starting server on :" + WEAR_TCP_PORT);
             (sct = SocketConnectionThread.serverListen(WEAR_TCP_PORT, new MessageHandler(context, this, configDatabase.getConfiguration(name)))).start();
         }
+        ConnectionConfiguration config = configDatabase.getConfiguration(name);
+        if (config != null) {
+            startBluetoothConnection(config);
+            if (isBluetoothConfiguration(config)) requestBluetoothPermission();
+        }
+        context.sendBroadcast(new Intent(context, TriggerReceiver.class));
     }
 
     public void disableConnection(String name) {
@@ -523,11 +579,15 @@ public class WearableImpl {
             sct.interrupt();
             sct = null;
         }
+        stopBluetoothConnection(name);
+        context.sendBroadcast(new Intent(context, TriggerReceiver.class));
     }
 
     public void deleteConnection(String name) {
+        stopBluetoothConnection(name);
         configDatabase.deleteConfiguration(name);
         configurationsUpdated = true;
+        context.sendBroadcast(new Intent(context, TriggerReceiver.class));
     }
 
     public void createConnection(ConnectionConfiguration config) {
@@ -535,6 +595,114 @@ public class WearableImpl {
         Log.d(TAG, "putConfig[nyp]: " + config);
         configDatabase.putConfiguration(config);
         configurationsUpdated = true;
+        if (config.enabled) {
+            startBluetoothConnection(config);
+            if (isBluetoothConfiguration(config)) requestBluetoothPermission();
+        }
+        context.sendBroadcast(new Intent(context, TriggerReceiver.class));
+    }
+
+    public void updateConfiguration(ConnectionConfiguration config) {
+        ConnectionConfiguration oldConfig = config.name != null ? configDatabase.getConfiguration(config.name) : null;
+        if (oldConfig == null) return;
+        boolean wasSyncEnabled = oldConfig.dataItemSyncEnabled;
+        if (config.nodeId == null) config.nodeId = oldConfig.nodeId;
+        configDatabase.putConfiguration(config);
+        configurationsUpdated = true;
+        MessageHandler handler;
+        synchronized (bluetoothThreads) {
+            handler = messageHandlers.get(config.name);
+        }
+        if (!wasSyncEnabled && config.dataItemSyncEnabled && handler != null) {
+            networkHandler.post(handler::startDataSync);
+        }
+    }
+
+    boolean isDataSyncEnabled(String configName) {
+        for (ConnectionConfiguration config : getConfigurations()) {
+            if (configName != null && configName.equals(config.name)) {
+                return config.dataItemSyncEnabled;
+            }
+        }
+        return true;
+    }
+
+    static boolean isBluetoothConfiguration(ConnectionConfiguration config) {
+        return config.role == 1 && config.name != null && BluetoothAdapter.checkBluetoothAddress(config.address);
+    }
+
+    boolean hasBluetoothConnections() {
+        synchronized (bluetoothThreads) {
+            return !bluetoothThreads.isEmpty();
+        }
+    }
+
+    void retryBluetoothConnections() {
+        synchronized (bluetoothThreads) {
+            for (BluetoothConnectionThread thread : bluetoothThreads.values()) {
+                thread.retryNow();
+            }
+        }
+    }
+
+    private void requestBluetoothPermission() {
+        if (SDK_INT < 31 || ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED) return;
+        synchronized (bluetoothThreads) {
+            if (permissionRequestActive) return;
+            permissionRequestActive = true;
+        }
+        Intent intent = new Intent(context, AskPermissionActivity.class);
+        intent.putExtra(AskPermissionActivityKt.EXTRA_MESSENGER, new Messenger(new Handler(Looper.getMainLooper()) {
+            @Override
+            public void handleMessage(Message msg) {
+                synchronized (bluetoothThreads) {
+                    permissionRequestActive = false;
+                }
+                if (msg.what == Activity.RESULT_OK) retryBluetoothConnections();
+            }
+        }));
+        intent.putExtra(AskPermissionActivityKt.EXTRA_PERMISSIONS, new String[]{Manifest.permission.BLUETOOTH_CONNECT});
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        context.startActivity(intent);
+        Log.d(TAG, "Started AskPermissionActivity");
+    }
+
+    private void startBluetoothConnection(ConnectionConfiguration config) {
+        if (!isBluetoothConfiguration(config)) return;
+        BluetoothManager bluetoothManager = (BluetoothManager) context.getSystemService(Context.BLUETOOTH_SERVICE);
+        BluetoothAdapter adapter = bluetoothManager != null ? bluetoothManager.getAdapter() : null;
+        if (adapter == null) {
+            Log.w(TAG, "No Bluetooth adapter, can't connect to " + config.name);
+            return;
+        }
+        synchronized (bluetoothThreads) {
+            BluetoothConnectionThread thread = bluetoothThreads.get(config.name);
+            if (thread != null && thread.isAlive() && thread.getAddress().equals(config.address)) return;
+            if (thread != null) thread.close();
+            Log.d(TAG, "Connecting to " + config.name + " over Bluetooth");
+            MessageHandler handler = new MessageHandler(context, this, config);
+            messageHandlers.put(config.name, handler);
+            thread = new BluetoothConnectionThread(adapter, config.address, handler);
+            bluetoothThreads.put(config.name, thread);
+            thread.start();
+        }
+    }
+
+    private void stopBluetoothConnection(String name) {
+        synchronized (bluetoothThreads) {
+            BluetoothConnectionThread thread = bluetoothThreads.remove(name);
+            messageHandlers.remove(name);
+            if (thread != null) thread.close();
+        }
+    }
+
+    public String getNodeIdForAddress(String address) {
+        for (ConnectionConfiguration config : getConfigurations()) {
+            if (address != null && address.equals(config.address)) {
+                return config.peerNodeId != null ? config.peerNodeId : config.nodeId;
+            }
+        }
+        return null;
     }
 
     public int deleteDataItems(Uri uri, String packageName) {
@@ -549,8 +717,70 @@ public class WearableImpl {
         Log.d(TAG, "onMessageReceived: " + messageEvent);
         Intent intent = new Intent("com.google.android.gms.wearable.MESSAGE_RECEIVED");
         intent.setPackage(packageName);
-        intent.setData(Uri.parse("wear://" + getLocalNodeId() + "/" + messageEvent.getPath()));
+        intent.setData(createEventUri(messageEvent.getSourceNodeId(), messageEvent.getPath()));
         invokeListeners(intent, listener -> listener.onMessageReceived(messageEvent));
+    }
+
+    public void sendRequestReceived(String packageName, MessageEventParcelable request, IRpcResponseCallback callback) {
+        Log.d(TAG, "onRequestReceived: " + request);
+        Intent intent = new Intent("com.google.android.gms.wearable.REQUEST_RECEIVED");
+        intent.setPackage(packageName);
+        intent.setData(createEventUri(request.getSourceNodeId(), request.getPath()));
+        invokeListeners(intent, listener -> listener.onRequestReceived(request, callback));
+    }
+
+    public void sendChannelEvent(String packageName, String path, ChannelEventParcelable event) {
+        Log.d(TAG, "onChannelEvent: " + event.eventType + " " + path);
+        Intent intent = new Intent("com.google.android.gms.wearable.CHANNEL_EVENT");
+        intent.setPackage(packageName);
+        intent.setData(createEventUri("", path));
+        invokeListeners(intent, listener -> listener.onChannelEvent(event));
+    }
+
+    private static Uri createEventUri(String host, String path) {
+        Uri.Builder builder = new Uri.Builder().scheme("wear").authority(host);
+        if (path != null) builder.path(path);
+        return builder.build();
+    }
+
+    public boolean isConnected(String nodeId) {
+        return nodeId != null && activeConnections.containsKey(nodeId);
+    }
+
+    public boolean writeMessage(String nodeId, RootMessage message) {
+        WearableConnection connection = activeConnections.get(nodeId);
+        if (connection == null) {
+            Log.d(TAG, nodeId + " seems not reachable");
+            return false;
+        }
+        try {
+            connection.writeMessage(message);
+            return true;
+        } catch (IOException e) {
+            Log.w(TAG, "Error while writing, closing link", e);
+            closeConnection(nodeId);
+            return false;
+        }
+    }
+
+    public DataItemRecord putGmsDataItem(String path, byte[] data) {
+        DataItemInternal dataItem = new DataItemInternal(getLocalNodeId(), path);
+        dataItem.data = data;
+        DataItemRecord record = putDataItem(Constants.GMS_PACKAGE_NAME, Constants.GMS_PACKAGE_SIGNATURE_SHA1, getLocalNodeId(), dataItem);
+        syncRecordToAll(record);
+        return record;
+    }
+
+    public DataItemRecord getGmsDataItem(String path) {
+        Cursor cursor = nodeDatabase.getDataItemsByHostAndPath(Constants.GMS_PACKAGE_NAME, Constants.GMS_PACKAGE_SIGNATURE_SHA1, getLocalNodeId(), path);
+        DataItemRecord record = null;
+        if (cursor != null) {
+            if (cursor.moveToNext()) {
+                record = DataItemRecord.fromCursor(cursor);
+            }
+            cursor.close();
+        }
+        return record;
     }
 
     public DataItemRecord getDataItemByUri(Uri uri, String packageName) {
@@ -576,12 +806,13 @@ public class WearableImpl {
 
     private void closeConnection(String nodeId) {
         WearableConnection connection = activeConnections.get(nodeId);
+        if (connection == null) return;
         try {
             connection.close();
         } catch (IOException e1) {
             Log.w(TAG, e1);
         }
-        if (connection == sct.getWearableConnection()) {
+        if (sct != null && connection == sct.getWearableConnection()) {
             sct.close();
             sct = null;
         }
@@ -596,12 +827,17 @@ public class WearableImpl {
     }
 
     public int sendMessage(String packageName, String targetNodeId, String path, byte[] data) {
+        return sendMessage(packageName, targetNodeId, path, data, false);
+    }
+
+    public int sendMessage(String packageName, String targetNodeId, String path, byte[] data, boolean highPriority) {
         if (activeConnections.containsKey(targetNodeId)) {
             WearableConnection connection = activeConnections.get(targetNodeId);
-            RpcHelper.RpcConnectionState state = rpcHelper.useConnectionState(packageName, targetNodeId, path);
+            RpcHelper.RpcConnectionState state = rpcHelper.useConnectionState(packageName, targetNodeId, path, highPriority);
             try {
                 connection.writeMessage(new RootMessage.Builder().rpcRequest(new Request.Builder()
                         .targetNodeId(targetNodeId)
+                        .unknown5(0)
                         .path(path)
                         .rawData(ByteString.of(data))
                         .packageName(packageName)
@@ -609,6 +845,7 @@ public class WearableImpl {
                         .sourceNodeId(getLocalNodeId())
                         .generation(state.generation)
                         .requestId(state.lastRequestId)
+                        .priority(highPriority ? 2 : 1)
                         .build()).build());
             } catch (IOException e) {
                 Log.w(TAG, "Error while writing, closing link", e);
@@ -622,6 +859,13 @@ public class WearableImpl {
     }
 
     public void stop() {
+        synchronized (bluetoothThreads) {
+            for (BluetoothConnectionThread thread : bluetoothThreads.values()) {
+                thread.close();
+            }
+            bluetoothThreads.clear();
+            messageHandlers.clear();
+        }
         try {
             this.networkHandlerLock.await();
             this.networkHandler.getLooper().quit();

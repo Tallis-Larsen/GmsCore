@@ -457,6 +457,21 @@
             </intent-filter>
         </service>
 
+        <receiver android:name="org.microg.gms.wearable.TriggerReceiver">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.bluetooth.device.action.ACL_CONNECTED" />
+            </intent-filter>
+        </receiver>
+
+        <activity
+            android:name="org.microg.gms.wearable.AskPermissionActivity"
+            android:excludeFromRecents="true"
+            android:process=":ui"
+            android:theme="@style/Theme.App.Translucent"
+            android:exported="false" />
+
         <activity
             android:name="com.google.android.gms.wearable.consent.TermsOfServiceActivity"
             android:process=":ui"

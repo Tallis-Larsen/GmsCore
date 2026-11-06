@@ -27,6 +27,7 @@ import org.microg.gms.settings.SettingsContract.Location
 import org.microg.gms.settings.SettingsContract.Profile
 import org.microg.gms.settings.SettingsContract.SafetyNet
 import org.microg.gms.settings.SettingsContract.Vending
+import org.microg.gms.settings.SettingsContract.Wearable
 import org.microg.gms.settings.SettingsContract.WorkProfile
 import org.microg.gms.settings.SettingsContract.getAuthority
 import java.io.File
@@ -119,6 +120,7 @@ class SettingsProvider : ContentProvider() {
         Profile.ID -> queryProfile(projection ?: Profile.PROJECTION)
         Location.ID -> queryLocation(projection ?: Location.PROJECTION)
         Vending.ID -> queryVending(projection ?: Vending.PROJECTION)
+        Wearable.ID -> queryWearable(projection ?: Wearable.PROJECTION)
         WorkProfile.ID -> queryWorkProfile(projection ?: WorkProfile.PROJECTION)
         GameProfile.ID -> queryGameProfile(projection ?: GameProfile.PROJECTION)
         else -> null
@@ -142,6 +144,7 @@ class SettingsProvider : ContentProvider() {
             Profile.ID -> updateProfile(values)
             Location.ID -> updateLocation(values)
             Vending.ID -> updateVending(values)
+            Wearable.ID -> updateWearable(values)
             WorkProfile.ID -> updateWorkProfile(values)
             GameProfile.ID -> updateGameProfile(values)
             else -> return 0
@@ -430,6 +433,25 @@ class SettingsProvider : ContentProvider() {
                 Vending.APPS_INSTALL -> editor.putBoolean(key, value as Boolean)
                 Vending.APPS_INSTALLER_LIST -> editor.putString(key, value as String)
                 Vending.PLAY_INTEGRITY_APP_LIST -> editor.putString(key, value as String)
+                else -> throw IllegalArgumentException("Unknown key: $key")
+            }
+        }
+        editor.apply()
+    }
+
+    private fun queryWearable(p: Array<out String>): Cursor = MatrixCursor(p).addRow(p) { key ->
+        when (key) {
+            Wearable.KEEP_CONNECTED -> getSettingsBoolean(key, false)
+            else -> throw IllegalArgumentException("Unknown key: $key")
+        }
+    }
+
+    private fun updateWearable(values: ContentValues) {
+        if (values.size() == 0) return
+        val editor = preferences.edit()
+        values.valueSet().forEach { (key, value) ->
+            when (key) {
+                Wearable.KEEP_CONNECTED -> editor.putBoolean(key, value as Boolean)
                 else -> throw IllegalArgumentException("Unknown key: $key")
             }
         }
